@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from torchvision.models.utils import load_state_dict_from_url
-
+import torchvision as tv
+import torch.nn.functional as F
+from torch.nn.parameter import Parameter
+import numpy as np
 
 __all__ = [
     'VGG', 'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
@@ -77,8 +80,6 @@ class Container(nn.Module):
 class VGG(Container):
     def __init__(self, feature_block, output_block, init_weights=True):
         super().__init__()
-        self.feature_block = feature_block
-        self.output_block = output_block
 
         if init_weights:
             self._initialize_weights()
@@ -96,6 +97,115 @@ class VGGAutoEncoder(Container):
         z = self.encoder(x)
         x = self.decoder(z)
         return z, x
+
+
+class SpatialSoftmax(torch.nn.Module):
+    def __init__(self, height, width):
+        super(SpatialSoftmax, self).__init__()
+        self.hs = Parameter(torch.linspace(0, 1, height).expand(1, 1, -1), requires_grad=False)
+        self.ws = Parameter(torch.linspace(0, 1, width).expand(1, 1, -1), requires_grad=False)
+
+    def marginalSoftMax(self, heatmap, dim):
+        marginal = torch.sum(heatmap, dim=dim)
+        sm = F.softmax(marginal, dim=2)
+        return sm
+
+    def forward(self, heatmap):
+        h_sm, w_sm = self.marginalSoftMax(heatmap, dim=3), self.marginalSoftMax(heatmap, dim=2)
+        h_k, w_k = torch.sum(h_sm * self.hs, dim=2, keepdim=True).squeeze(2), \
+                   torch.sum(w_sm * self.ws, dim=2, keepdim=True).squeeze(2)
+        return h_k, w_k
+
+
+def squared_diff(h, height):
+    hs = torch.linspace(0, 1, height, device=h.device).expand(h.shape[0], h.shape[1], height)
+    hm = h.expand(height, -1, -1).permute(1, 2, 0)
+    #hm = ((hs - hm) ** 2)
+    hm = (hs - hm).abs()
+    return hm
+
+
+def gaussian_like_function(kp, height, width, sigma=0.1):
+    h, w = kp
+    hm = squared_diff(h, height)
+    wm = squared_diff(w, width)
+    hm = hm.expand(width, -1, -1, -1).permute(1, 2, 3, 0)
+    wm = wm.expand(height, -1, -1, -1).permute(1, 2, 0, 3)
+    #gm = - (hm + wm).sqrt_() / (2 * sigma ** 2)
+    gm = - (hm + wm) / (2 * sigma ** 2)
+    gm = torch.exp(gm)
+    return gm
+
+
+class GaussianLike(nn.Module):
+    def __init__(self, height, width, sigma=0.1):
+        super().__init__()
+        self.height = height
+        self.width = width
+        self.sigma = sigma
+
+    def forward(self, kp):
+        return gaussian_like_function(kp, self.height, self.width, self.sigma)
+
+
+class CopyPoints(nn.Module):
+    def __init__(self, height, width, sigma=0.1):
+        super().__init__()
+        self.height = height
+        self.width = width
+
+    def forward(self, kp):
+        x, y = kp
+        x = x.reshape(*x.shape, 1, 1).expand(*x.shape, self.height, self.width)
+        y = y.reshape(*y.shape, 1, 1).expand(*y.shape, self.height, self.width)
+        return torch.cat((x, y), dim=1)
+
+
+class Keypoint(nn.Module):
+    def __init__(self, encoder, num_keypoints, height, width):
+        super().__init__()
+        self.encoder = encoder
+        self.reducer = nn.Sequential(nn.Conv2d(512, num_keypoints, kernel_size=1, stride=1),
+                                     nn.BatchNorm2d(num_keypoints),
+                                     nn.ReLU())
+        self.ssm = SpatialSoftmax(height, width)
+
+    def forward(self, x_t):
+        z_t = self.encoder(x_t)
+        z_t = self.reducer(z_t)
+        k = self.ssm(z_t)
+        return k
+
+
+class VGGKeypoints(nn.Module):
+    def __init__(self, encoder, decoder, keypoint, keymapper, init_weights=True):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.keypoint = keypoint
+        self.keymapper = keymapper
+        if init_weights:
+            self._initialize_weights()
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x, x_t):
+        z = self.encoder(x)
+        k = self.keypoint(x_t)
+        gm = self.keymapper(k)
+        x_t = self.decoder(torch.cat((z, gm), dim=1))
+        return x_t, z, k
 
 
 class MaxPool2dA(nn.Module):
@@ -120,34 +230,24 @@ class MaxUnpool2dA(nn.Module):
         return x
 
 
-def make_auto(cfg):
-    encoder = []
-    decoder = []
+class ActivationMap(nn.Module):
+    def __init__(self):
+        super().__init__()
 
-    in_channels = 3
-
-    for v in cfg:
-        if v == 'M':
-            pool = MaxPool2dA(kernel_size=2, stride=2)
-            encoder += [pool]
-            decoder.insert(0, MaxUnpool2dA(pool, kernel_size=2, stride=2))
-        else:
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
-            convt2d = nn.ConvTranspose2d(v, in_channels, kernel_size=3, padding=1)
-            encoder += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
-            decoder.insert(0, nn.ReLU(inplace=True))
-            decoder.insert(0, nn.BatchNorm2d(in_channels))
-            decoder.insert(0, convt2d)
-            in_channels = v
-    return nn.Sequential(*encoder), nn.Sequential(*decoder)
+    def forward(self, x):
+        return x
 
 
 def make_layers(cfg, batch_norm=False):
     layers = []
-    in_channels = 3
-    for v in cfg:
+    in_channels = cfg[0]
+    for v in cfg[1:]:
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+        elif v == 'U':
+            layers += [nn.UpsamplingBilinear2d(scale_factor=2)]
+        elif v == 'L':
+            layers += [ActivationMap()]
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
             if batch_norm:
@@ -158,24 +258,64 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 
-def make_layers_inv(cfg, batch_norm=False):
-    layers = []
-    in_channels = None
-    out_channels = 3
-    cfg.insert(0, out_channels)
-    for v in reversed(cfg):
-        if v == 'M':
-            layers += [nn.MaxUnpool2d(kernel_size=2, stride=2)]
-        elif in_channels is None:
-            in_channels = v
+class PerceptualLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.vgg16 = tv.models.vgg16(pretrained=True).eval()
+        layers = list(self.modules())
+        layers[4].register_forward_hook(self._hook)
+        layers[9].register_forward_hook(self._hook)
+        layers[14].register_forward_hook(self._hook)
+        layers[23].register_forward_hook(self._hook)
+        self.update_target = False
+        self.x_activations = []
+        self.target_activations = []
+
+    def _hook(self, module, input, activations):
+        if self.update_target:
+            self.target_activations.append(activations)
         else:
-            conv2d = nn.ConvTranspose2d(in_channels, v, kernel_size=3, padding=1)
-            if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
-            else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
-            in_channels = v
-    return nn.Sequential(*layers)
+            self.x_activations.append(activations)
+
+    def _loss(self, x, target):
+        loss = 0.0
+        for i, _ in enumerate(self.x_activations):
+            x = self.x_activations[i]
+            target = self.target_activations[i]
+            loss += F.mse_loss(x, target, reduction='mean')
+        return loss
+
+    def forward(self, x, target):
+        self.x_activations = []
+        self.target_activations = []
+        self.update_target = False
+        self.vgg16(x)
+        self.update_target = True
+        self.vgg16(target)
+        return self._loss(x, target)
+
+
+class Identity(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x
+
+
+"""
+M -> MaxPooling
+L -> Capture Activations for Perceptual loss
+"""
+
+auto_cfgs = {
+    'A': {"encoder": [3, 64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M'],
+          "decoder": [512, 256, 'U', 256, 128, 'U', 128, 64, 'U', 64, 32, 'U', 32, 3]},
+    'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+    'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
+    'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+}
+
 
 cfgs = {
     'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -199,12 +339,36 @@ def _vgg(arch, cfg, output_block, batch_norm, pretrained, progress, **kwargs):
 def _vgg_auto(cfg, pretrained, **kwargs):
     if pretrained:
         kwargs['init_weights'] = False
-    encoder, decoder = make_auto(cfgs[cfg])
+    encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
+    decoder = make_layers(auto_cfgs[cfg]["decoder"], batch_norm=True)
     return VGGAutoEncoder(encoder, decoder)
 
 
-def vgg11_bn_auto():
-    return _vgg_auto('A', pretrained=False)
+def _vgg_kp(cfg, pretrained, **kwargs):
+    if pretrained:
+        kwargs['init_weights'] = False
+    # need to add the number of keypoints to the channels of 1st layer
+    encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
+    decoder_cfg = auto_cfgs[cfg]["decoder"].copy()
+    decoder_cfg[0] += kwargs["num_keypoints"]
+    decoder = make_layers(decoder_cfg, batch_norm=True)
+    kp_encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
+    keypoints = Keypoint(kp_encoder, num_keypoints=kwargs['num_keypoints'], height=kwargs["height"], width=kwargs["width"])
+    keymapper = GaussianLike(height=kwargs["height"], width=kwargs["width"], sigma=kwargs["sigma"])
+    #keymapper = CopyPoints(height=kwargs["height"], width=kwargs["width"], sigma=kwargs["sigma"])
+    return VGGKeypoints(encoder, decoder, keypoints, keymapper, init_weights=True)
+
+
+def _vgg_kp_test(cfg, pretrained, **kwargs):
+    if pretrained:
+        kwargs['init_weights'] = False
+    # need to add the number of keypoints to the channels of 1st layer
+    auto_cfgs[cfg]["decoder"][0] += kwargs["num_keypoints"]
+    encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
+    decoder = make_layers(auto_cfgs[cfg]["decoder"], batch_norm=True)
+    keypoints = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
+    keymapper = Identity()
+    return VGGKeypoints(encoder, decoder, keypoints, keymapper)
 
 
 def vgg11(output_block, pretrained=False, progress=True, **kwargs):
@@ -218,16 +382,16 @@ def vgg11(output_block, pretrained=False, progress=True, **kwargs):
     return _vgg('vgg11', 'A', output_block, False, pretrained, progress, **kwargs)
 
 
-def vgg11_inv(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 11-layer model (configuration "A") from
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
+def vgg11_bn_auto():
+    return _vgg_auto('A', pretrained=False)
 
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg11', 'A', output_block, False, pretrained, progress, **kwargs)
 
+def vgg11_bn_keypoint(height, width, num_keypoints=10, sigma=1.0, **kwargs):
+    return _vgg_kp('A', pretrained=False, height=height, width=width, num_keypoints=num_keypoints, sigma=sigma, **kwargs)
+
+
+def vgg11_bn_keypoint_test(height, width, num_keypoints=10):
+    return _vgg_kp_test('A', pretrained=False, height=height, width=width, num_keypoints=num_keypoints)
 
 
 def vgg11_bn(output_block, pretrained=False, progress=True, **kwargs):
@@ -276,6 +440,8 @@ def vgg16(output_block, pretrained=False, progress=True, **kwargs):
     """
     return _vgg('vgg16', 'D', output_block, False, pretrained, progress, **kwargs)
 
+def vgg16_bn_auto():
+    return _vgg_auto('D', pretrained=False)
 
 
 def vgg16_bn(output_block, pretrained=False, progress=True, **kwargs):

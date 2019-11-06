@@ -4,3 +4,6 @@ torchvision
 tqdm
 opencv-python
 numpy
+pytest
+morphops
+matplotlib
