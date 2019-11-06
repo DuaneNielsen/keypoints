@@ -24,7 +24,7 @@ if __name__ == '__main__':
     run_id = 3
     epochs = 800
     torchvision_data_root = '~/tv-data'
-    model_name = 'vgg_auto_16'
+    model_name = 'vgg_kp_11'
 
     """ hyper-parameters"""
     batch_size = 16

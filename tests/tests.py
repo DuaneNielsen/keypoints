@@ -139,6 +139,7 @@ def test_plot_gaussian_function():
     plt.colorbar(p)
     plt.show()
 
+
 def test_bottlneck_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
     h = heatmap.neg()

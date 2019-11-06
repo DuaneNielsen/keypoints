@@ -24,12 +24,12 @@ if __name__ == '__main__':
 
     """ config """
     train_mode = True
-    reload = False
-    load_run_id = 2
-    run_id = 3
+    reload = True
+    load_run_id = 3
+    run_id = 4
     epochs = 800
-    torchvision_data_root = '~/tv-data'
-    model_name = 'vgg_auto_16'
+    torchvision_data_root = 'data'
+    model_name = 'vgg_kp_11'
 
     """ hyper-parameters"""
     batch_size = 32
@@ -60,7 +60,7 @@ if __name__ == '__main__':
             classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
             """ model """
-            kp_network = models.vgg11_bn_keypoint(14, 12, sigma=0.2, num_keypoints=10, init_weights=True).to(device)
+            kp_network = models.vgg11_bn_keypoint(14, 12, sigma=0.1, num_keypoints=10, init_weights=True).to(device)
             #kp_network = models.vgg11_bn_keypoint_test(0, 0, num_keypoints=512).to(device)
             #kp_network = models.vgg11_bn_keypoint_test(0, 0, num_keypoints=0).to(device)
 
@@ -83,6 +83,7 @@ if __name__ == '__main__':
 
             for epoch in range(reload + 1, reload + epochs):
 
+                ll = []
                 """ training """
                 batch = tqdm(train_l, total=len(train) // batch_size)
                 for i, (x, _) in enumerate(batch):
@@ -103,7 +104,10 @@ if __name__ == '__main__':
                         #print(kp_network.keypoint.reducer._modules['0'].weight.grad)
                         optim.step()
 
-                    batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {loss.item()}')
+                    ll.append(loss.item())
+                    if len(ll) > 20:
+                        ll.pop(0)
+                    batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
 
                     if not i % 8:
                         #print(kp_network.decoder._modules['0'].weight.grad.data.norm().item())
