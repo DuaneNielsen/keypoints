@@ -1,6 +1,10 @@
 import torch
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 def precision(confusion):
     correct = confusion * torch.eye(confusion.shape[0])
@@ -92,3 +96,26 @@ class UniImageViewer:
 
     def update(self, image):
         self.render(image)
+
+
+def plot_keypoints_on_image(k, image_tensor):
+    height, width = image_tensor.size(2), image_tensor.size(3)
+    x, y = k
+    x, y = x.detach().squeeze().numpy(), y.detach().squeeze().numpy()
+
+    fig = Figure()
+    canvas = FigureCanvas(fig)
+    ax = fig.gca()
+
+    ax.axis('off')
+    ax.imshow(image_tensor.squeeze().permute(1, 2, 0), zorder=1)
+    cluster = list(Line2D.filled_markers)[:x.shape[0]]
+    for xp, yp, m in zip(x, y, cluster):
+        ax.scatter(xp * height, yp * width, marker=m, zorder=2)
+    canvas.draw()
+
+    s, (width, height) = canvas.print_to_buffer()
+
+    # Option 2a: Convert to a NumPy array.
+    image = np.fromstring(s, np.uint8).reshape((height, width, 4))
+    return image

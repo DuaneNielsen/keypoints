@@ -10,7 +10,10 @@ from torchvision.transforms import ToTensor
 from tps import tps_grid, tps_random
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
+from utils import plot_keypoints_on_image, UniImageViewer
+
 
 def test_plot():
     z = np.array([[x**2 + y**2 for x in range(20)] for y in range(20)])
@@ -121,7 +124,6 @@ def test_plot_gaussian_function():
     mu = 0.5
     sigma = 0.4
     kp = torch.randn(1, 1, requires_grad=True) * sigma + mu, torch.randn(1, 1, requires_grad=True) * sigma + mu
-    #kp = torch.zeros(1, 1, requires_grad=True), torch.zeros(1, 1, requires_grad=True)
     z = models.gaussian_like_function(kp, 14, 14, sigma=0.2).squeeze().detach().numpy()
     coordinates = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
 
@@ -138,6 +140,35 @@ def test_plot_gaussian_function():
     p = plt.imshow(z)
     plt.colorbar(p)
     plt.show()
+
+
+def test_plot_keypoints():
+    bm = bad_monkey()
+    height, width = bm.size(2), bm.size(3)
+    heatmap = torch.rand(1, 10, height, width, requires_grad=False)
+    h = heatmap.neg()
+    ss = models.SpatialSoftmax(height, width)
+    x, y = ss(h)
+    x, y = x.squeeze().detach().numpy(), y.squeeze().detach().numpy()
+
+    # show height map in 2d
+    fig, ax = plt.subplots()
+    ax.axis('off')
+    ax.imshow(bm.squeeze().permute(1, 2, 0), zorder=1)
+    cluster = list(Line2D.filled_markers)[:x.shape[0]]
+    for xp, yp, m in zip(x, y, cluster):
+        ax.scatter(xp * height, yp * width, marker=m, zorder=2)
+    plt.show()
+
+
+def test_plt_keypoints():
+    bm = bad_monkey()
+    height, width = bm.size(2), bm.size(3)
+    heatmap = torch.rand(1, 10, height, width, requires_grad=False)
+    ss = models.SpatialSoftmax(height, width)
+    k = ss(heatmap)
+    image = plot_keypoints_on_image(k, bm)
+    UniImageViewer().render(image, block=True)
 
 
 def test_bottlneck_grads():
