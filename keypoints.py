@@ -60,7 +60,7 @@ if __name__ == '__main__':
 
     """ data """
     transform = transforms.Compose([
-        transforms.Resize((224, 192)),
+        transforms.Resize((128, 128)),
         transforms.ToTensor(),
     ])
 
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     """ model """
-    kp_network = models.vgg11_bn_keypoint(14, 12, sigma=0.1, num_keypoints=10, init_weights=True).to(device)
+    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=10, init_weights=True).to(device)
 
     if reload:
         load_model()
@@ -124,6 +124,7 @@ if __name__ == '__main__':
         """ test  """
         with torch.no_grad():
             batch = tqdm(test_l, total=len(test) // batch_size)
+            del ll
             ll = []
             for i, (x, _) in enumerate(batch):
                 x = x.to(device)

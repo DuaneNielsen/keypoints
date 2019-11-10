@@ -100,10 +100,12 @@ class VGGAutoEncoder(Container):
 
 
 class SpatialSoftmax(torch.nn.Module):
-    def __init__(self, height, width):
+    def __init__(self):
         super(SpatialSoftmax, self).__init__()
-        self.hs = Parameter(torch.linspace(0, 1, height).expand(1, 1, -1), requires_grad=False)
-        self.ws = Parameter(torch.linspace(0, 1, width).expand(1, 1, -1), requires_grad=False)
+
+        # for backwards compatibility
+        self.hs = Parameter(torch.zeros(1, 1, 14), requires_grad=False)
+        self.ws = Parameter(torch.zeros(1, 1, 12), requires_grad=False)
 
     def marginalSoftMax(self, heatmap, dim):
         marginal = torch.sum(heatmap, dim=dim)
@@ -111,9 +113,12 @@ class SpatialSoftmax(torch.nn.Module):
         return sm
 
     def forward(self, heatmap):
+        height, width = heatmap.size(2), heatmap.size(3)
         h_sm, w_sm = self.marginalSoftMax(heatmap, dim=3), self.marginalSoftMax(heatmap, dim=2)
-        h_k, w_k = torch.sum(h_sm * self.hs, dim=2, keepdim=True).squeeze(2), \
-                   torch.sum(w_sm * self.ws, dim=2, keepdim=True).squeeze(2)
+        hs = torch.linspace(0, 1, height).expand(1, 1, -1).to(heatmap.device)
+        ws = torch.linspace(0, 1, width).expand(1, 1, -1).to(heatmap.device)
+        h_k, w_k = torch.sum(h_sm * hs, dim=2, keepdim=True).squeeze(2), \
+                   torch.sum(w_sm * ws, dim=2, keepdim=True).squeeze(2)
         return h_k, w_k
 
 
@@ -138,14 +143,12 @@ def gaussian_like_function(kp, height, width, sigma=0.1):
 
 
 class GaussianLike(nn.Module):
-    def __init__(self, height, width, sigma=0.1):
+    def __init__(self, sigma=0.1):
         super().__init__()
-        self.height = height
-        self.width = width
         self.sigma = sigma
 
-    def forward(self, kp):
-        return gaussian_like_function(kp, self.height, self.width, self.sigma)
+    def forward(self, kp, height, width):
+        return gaussian_like_function(kp, height, width, self.sigma)
 
 
 class CopyPoints(nn.Module):
@@ -162,13 +165,13 @@ class CopyPoints(nn.Module):
 
 
 class Keypoint(nn.Module):
-    def __init__(self, encoder, num_keypoints, height, width):
+    def __init__(self, encoder, num_keypoints):
         super().__init__()
         self.encoder = encoder
         self.reducer = nn.Sequential(nn.Conv2d(512, num_keypoints, kernel_size=1, stride=1),
                                      nn.BatchNorm2d(num_keypoints),
                                      nn.ReLU())
-        self.ssm = SpatialSoftmax(height, width)
+        self.ssm = SpatialSoftmax()
 
     def forward(self, x_t):
         z_t = self.encoder(x_t)
@@ -203,7 +206,7 @@ class VGGKeypoints(nn.Module):
     def forward(self, x, x_t):
         z = self.encoder(x)
         k = self.keypoint(x_t)
-        gm = self.keymapper(k)
+        gm = self.keymapper(k, height=z.size(2), width=z.size(3))
         x_t = self.decoder(torch.cat((z, gm), dim=1))
         return x_t, z, k
 
@@ -353,8 +356,8 @@ def _vgg_kp(cfg, pretrained, **kwargs):
     decoder_cfg[0] += kwargs["num_keypoints"]
     decoder = make_layers(decoder_cfg, batch_norm=True)
     kp_encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
-    keypoints = Keypoint(kp_encoder, num_keypoints=kwargs['num_keypoints'], height=kwargs["height"], width=kwargs["width"])
-    keymapper = GaussianLike(height=kwargs["height"], width=kwargs["width"], sigma=kwargs["sigma"])
+    keypoints = Keypoint(kp_encoder, num_keypoints=kwargs['num_keypoints'])
+    keymapper = GaussianLike(sigma=kwargs["sigma"])
     #keymapper = CopyPoints(height=kwargs["height"], width=kwargs["width"], sigma=kwargs["sigma"])
     return VGGKeypoints(encoder, decoder, keypoints, keymapper, init_weights=True)
 
@@ -386,8 +389,8 @@ def vgg11_bn_auto():
     return _vgg_auto('A', pretrained=False)
 
 
-def vgg11_bn_keypoint(height, width, num_keypoints=10, sigma=1.0, **kwargs):
-    return _vgg_kp('A', pretrained=False, height=height, width=width, num_keypoints=num_keypoints, sigma=sigma, **kwargs)
+def vgg11_bn_keypoint(num_keypoints=10, sigma=1.0, **kwargs):
+    return _vgg_kp('A', pretrained=False, num_keypoints=num_keypoints, sigma=sigma, **kwargs)
 
 
 def vgg11_bn_keypoint_test(height, width, num_keypoints=10):

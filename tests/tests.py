@@ -60,7 +60,7 @@ def test_spacial_softmax():
         [0, 0, 0, 0, 0],
     ]).expand(1, 1, 5, 5).float()
 
-    ss = models.SpatialSoftmax(5, 5)
+    ss = models.SpatialSoftmax()
 
     k = ss(heatmap)
 
@@ -76,7 +76,7 @@ def test_gaussian_like():
         [0, 0, 0, 0, 0],
     ]).expand(1, 1, 5, 5).float()
 
-    ss = models.SpatialSoftmax(5, 5)
+    ss = models.SpatialSoftmax()
 
     k = ss(heatmap)
 
@@ -105,7 +105,7 @@ def test_gaussian_like_batch():
 
     ]).expand(2, 2, 5, 5).float()
 
-    ss = models.SpatialSoftmax(5, 5)
+    ss = models.SpatialSoftmax()
 
     k = ss(heatmap)
 
@@ -117,7 +117,7 @@ def test_gaussian_like_batch():
 def test_spacial_softmax_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
     h = heatmap.neg()
-    ss = models.SpatialSoftmax(5, 5)
+    ss = models.SpatialSoftmax()
     k = ss(h)
     loss = torch.sum(torch.cat(k, dim=1))
     loss.backward()
@@ -162,7 +162,7 @@ def test_plot_keypoints():
     height, width = bm.size(2), bm.size(3)
     heatmap = torch.rand(1, 10, height, width, requires_grad=False)
     h = heatmap.neg()
-    ss = models.SpatialSoftmax(height, width)
+    ss = models.SpatialSoftmax()
     x, y = ss(h)
     x, y = x.squeeze().detach().numpy(), y.squeeze().detach().numpy()
 
