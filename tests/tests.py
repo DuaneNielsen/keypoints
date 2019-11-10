@@ -13,6 +13,18 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 from utils import plot_keypoints_on_image, UniImageViewer
+import torchvision.transforms as tvt
+
+
+""" DATA  """
+
+
+def bad_monkey(copies=1):
+    p = Path('/home/duane/tv-data/bad_monkey.jpg')
+    assert p.exists()
+    x = cv2.imread(str(p))
+    x = ToTensor()(x).expand(copies, -1, -1, -1)
+    return x
 
 
 def test_plot():
@@ -34,6 +46,9 @@ def test_perceptual_loss():
     loss = criterion(x, target)
     print(f'loss: {loss.item()}')
     # assert loss.item() == F.mse_loss(x, target).item()
+
+
+""" SPACIAL BOTTLENECK """
 
 
 def test_spacial_softmax():
@@ -161,16 +176,6 @@ def test_plot_keypoints():
     plt.show()
 
 
-def test_plt_keypoints():
-    bm = bad_monkey()
-    height, width = bm.size(2), bm.size(3)
-    heatmap = torch.rand(1, 10, height, width, requires_grad=False)
-    ss = models.SpatialSoftmax(height, width)
-    k = ss(heatmap)
-    image = plot_keypoints_on_image(k, bm)
-    UniImageViewer().render(image, block=True)
-
-
 def test_bottlneck_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
     h = heatmap.neg()
@@ -181,6 +186,7 @@ def test_bottlneck_grads():
     loss.backward()
     print(heatmap.grad)
     print(kp[0].grad, kp[1].grad)
+
 
 def test_intermediate_grads():
     heatmap = torch.rand(1, 5, requires_grad=True)
@@ -194,12 +200,22 @@ def test_intermediate_grads():
     print(heatmap.grad)
 
 
-def bad_monkey(copies=1):
-    p = Path('/home/duane/tv-data/bad_monkey.jpg')
-    assert p.exists()
-    x = cv2.imread(str(p))
-    x = ToTensor()(x).expand(copies, -1, -1, -1)
-    return x
+"""  DISPLAY THE KEYPOINTS """
+
+
+def test_plt_keypoints():
+    num_monkeys = 1
+    bm = bad_monkey(num_monkeys)
+    height, width = bm.size(2), bm.size(3)
+    heatmap = torch.rand(num_monkeys, 10, height, width, requires_grad=False)
+    ss = models.SpatialSoftmax(height, width)
+    k = ss(heatmap)
+    image = plot_keypoints_on_image(k, bm, batch_index=torch.arange(num_monkeys))
+    image = tvt.ToTensor()(tvt.Resize((256, 256))(image))
+    UniImageViewer().render(image, block=True)
+
+
+""" THIN PLATE SPLINES"""
 
 
 def test_flowfield():

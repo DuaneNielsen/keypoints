@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
+import torchvision.transforms as tvt
+from PIL import Image
+import matplotlib
 
 def precision(confusion):
     correct = confusion * torch.eye(confusion.shape[0])
@@ -98,24 +101,37 @@ class UniImageViewer:
         self.render(image)
 
 
-def plot_keypoints_on_image(k, image_tensor):
+def plot_keypoints_on_image(k, image_tensor, batch_index=torch.tensor([0], dtype=torch.long)):
+
     height, width = image_tensor.size(2), image_tensor.size(3)
+    image_tensor = torch.cat(torch.unbind(image_tensor[batch_index], 0), dim=2)
     x, y = k
-    x, y = x.detach().squeeze().numpy(), y.detach().squeeze().numpy()
+    x, y = x[batch_index].detach().squeeze().cpu().numpy(), y[batch_index].detach().squeeze().cpu().numpy()
 
     fig = Figure()
     canvas = FigureCanvas(fig)
     ax = fig.gca()
 
     ax.axis('off')
-    ax.imshow(image_tensor.squeeze().permute(1, 2, 0), zorder=1)
+    ax.margins(0)
+    ax.set_xlim(0.0, width)
+    ax.set_ylim(height, 0.0)
+    ax.xaxis.set_major_locator(matplotlib.ticker.NullLocator())
+    ax.yaxis.set_major_locator(matplotlib.ticker.NullLocator())
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    plt.autoscale(tight=True)
+    fig.tight_layout()
+    ax.imshow(image_tensor.permute(1, 2, 0).cpu(), zorder=1)
     cluster = list(Line2D.filled_markers)[:x.shape[0]]
-    for xp, yp, m in zip(x, y, cluster):
-        ax.scatter(xp * height, yp * width, marker=m, zorder=2)
-    canvas.draw()
+    offset = 0
+    for i in range(batch_index.size(0)):
+        for xp, yp, m in zip(x, y, cluster):
+            ax.scatter(xp * width + offset, yp * height, marker=m, zorder=2)
+        canvas.draw()
+        offset += width
 
-    s, (width, height) = canvas.print_to_buffer()
+    s = canvas.tostring_rgb()
 
-    # Option 2a: Convert to a NumPy array.
-    image = np.fromstring(s, np.uint8).reshape((height, width, 4))
-    return image
+    # return PIL image.
+    return Image.frombytes("RGB", fig.canvas.get_width_height(), s)

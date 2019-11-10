@@ -10,11 +10,9 @@ from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
 import models
-from utils import get_lr, UniImageViewer
+from utils import get_lr, UniImageViewer, plot_keypoints_on_image
 from tps import tps_random
 
-view_in = UniImageViewer('in', screen_resolution=(224 * 3, 192))
-view_kp = UniImageViewer('in', screen_resolution=(224 * 3, 192))
 
 def load_model():
     encoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/encoder.mdl')
@@ -37,20 +35,23 @@ def save_model():
     torch.save(kp_network.keypoint.state_dict(), str(keypoint_block_save_path))
 
 
+view_in = UniImageViewer('in', screen_resolution=(224 * 3, 192))
+
+
 if __name__ == '__main__':
 
     """ config """
     train_mode = True
     reload = True
-    load_run_id = 3
-    run_id = 4
+    load_run_id = 4
+    run_id = 5
     epochs = 800
     torchvision_data_root = 'data'
     model_name = 'vgg_kp_11'
 
     """ hyper-parameters"""
     batch_size = 32
-    lr = 0.01
+    lr = 0.001
 
     """ variables """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -86,6 +87,8 @@ if __name__ == '__main__':
     """ loss function """
     criterion = nn.MSELoss()
 
+    """ utils """
+
     for epoch in range(reload + 1, reload + epochs):
 
         ll = []
@@ -111,7 +114,12 @@ if __name__ == '__main__':
             batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
 
             if not i % 8:
-                view_in.render(torch.cat((x[0], x_[0], x_t[0]), dim=2))
+                height, width = x.size(2), x.size(3)
+                kp_image = plot_keypoints_on_image(k, x_)
+                kp_image = transforms.Resize((height, width))(kp_image)
+                kp_image_t = transforms.ToTensor()(kp_image).to(device)
+
+                view_in.render(torch.cat((x[0], x_[0], x_t[0], kp_image_t), dim=2))
 
         """ test  """
         with torch.no_grad():
