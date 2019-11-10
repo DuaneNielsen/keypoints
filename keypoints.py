@@ -35,14 +35,23 @@ def save_model():
     torch.save(kp_network.keypoint.state_dict(), str(keypoint_block_save_path))
 
 
-view_in = UniImageViewer('in', screen_resolution=(224 * 3, 192))
+view_in = UniImageViewer('in', screen_resolution=(128 * 3 * 4, 128 * 4))
+
+
+def display(x, x_, k):
+    height, width = x.size(2), x.size(3)
+    key_x, key_y = k
+    kp_image = plot_keypoints_on_image((key_x.float(), key_y.float()), x_.float())
+    kp_image = transforms.Resize((height, width))(kp_image)
+    kp_image_t = transforms.ToTensor()(kp_image).to(device)
+    view_in.render(torch.cat((x[0].float(), x_[0].float(), x_t[0].float(), kp_image_t), dim=2))
 
 
 if __name__ == '__main__':
 
     """ config """
     train_mode = True
-    reload = True
+    reload = False
     load_run_id = 4
     run_id = 5
     epochs = 800
@@ -50,8 +59,8 @@ if __name__ == '__main__':
     model_name = 'vgg_kp_11'
 
     """ hyper-parameters"""
-    batch_size = 32
-    lr = 0.001
+    batch_size = 96
+    lr = 0.1
 
     """ variables """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -76,6 +85,11 @@ if __name__ == '__main__':
     """ model """
     kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=10, init_weights=True).to(device)
 
+    kp_network.half()  # convert to half precision
+    for layer in kp_network.modules():
+        if isinstance(layer, nn.BatchNorm2d):
+            layer.float()
+
     if reload:
         load_model()
 
@@ -96,7 +110,7 @@ if __name__ == '__main__':
         batch = tqdm(train_l, total=len(train) // batch_size)
         for i, (x, _) in enumerate(batch):
             max_i = max_i if i < max_i else i
-            x = x.to(device)
+            x = x.half().to(device)
             x = tps_random(x, var=0.05)
             x_ = tps_random(x, var=0.05)
 
@@ -114,12 +128,7 @@ if __name__ == '__main__':
             batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
 
             if not i % 8:
-                height, width = x.size(2), x.size(3)
-                kp_image = plot_keypoints_on_image(k, x_)
-                kp_image = transforms.Resize((height, width))(kp_image)
-                kp_image_t = transforms.ToTensor()(kp_image).to(device)
-
-                view_in.render(torch.cat((x[0], x_[0], x_t[0], kp_image_t), dim=2))
+                display(x, x_, k)
 
         """ test  """
         with torch.no_grad():
@@ -127,7 +136,7 @@ if __name__ == '__main__':
             del ll
             ll = []
             for i, (x, _) in enumerate(batch):
-                x = x.to(device)
+                x = x.half().to(device)
                 x = tps_random(x, var=0.05)
                 x_ = tps_random(x, var=0.05)
 
@@ -136,7 +145,7 @@ if __name__ == '__main__':
                 ll.append(loss.detach().item())
                 batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
                 if not i % 8:
-                    view_in.render(torch.cat((x[0], x_[0], x_t[0]), dim=2))
+                    display(x, x_, k)
 
         """ check improvement """
         ave_loss = stats.mean(ll)

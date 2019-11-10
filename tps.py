@@ -122,7 +122,7 @@ def tps_random(x, num_control_points=4, var=0.4):
     device = x.device
     theta = torch.randn(x.size(0), num_control_points + 3, 2) * var
     c = torch.rand(x.size(0), num_control_points, 2)
-    grid = tps_grid(theta, c, x.shape).to(device)
+    grid = tps_grid(theta, c, x.shape).half().to(device)
     return torch.nn.functional.grid_sample(x, grid)
 
 

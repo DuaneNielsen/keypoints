@@ -115,15 +115,15 @@ class SpatialSoftmax(torch.nn.Module):
     def forward(self, heatmap):
         height, width = heatmap.size(2), heatmap.size(3)
         h_sm, w_sm = self.marginalSoftMax(heatmap, dim=3), self.marginalSoftMax(heatmap, dim=2)
-        hs = torch.linspace(0, 1, height).expand(1, 1, -1).to(heatmap.device)
-        ws = torch.linspace(0, 1, width).expand(1, 1, -1).to(heatmap.device)
+        hs = torch.linspace(0, 1, height).type_as(heatmap).expand(1, 1, -1).to(heatmap.device)
+        ws = torch.linspace(0, 1, width).type_as(heatmap).expand(1, 1, -1).to(heatmap.device)
         h_k, w_k = torch.sum(h_sm * hs, dim=2, keepdim=True).squeeze(2), \
                    torch.sum(w_sm * ws, dim=2, keepdim=True).squeeze(2)
         return h_k, w_k
 
 
 def squared_diff(h, height):
-    hs = torch.linspace(0, 1, height, device=h.device).expand(h.shape[0], h.shape[1], height)
+    hs = torch.linspace(0, 1, height, device=h.device).type_as(h).expand(h.shape[0], h.shape[1], height)
     hm = h.expand(height, -1, -1).permute(1, 2, 0)
     hm = ((hs - hm) ** 2)
     #hm = (hs - hm).abs()
@@ -312,8 +312,8 @@ L -> Capture Activations for Perceptual loss
 """
 
 auto_cfgs = {
-    'A': {"encoder": [3, 64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M'],
-          "decoder": [512, 256, 'U', 256, 128, 'U', 128, 64, 'U', 64, 32, 'U', 32, 3]},
+    'A': {"encoder": [3, 64, 'M', 128, 'M', 256, 256, 'M', 512, 512],
+          "decoder": [512, 256, 'U', 256, 128, 'U', 128, 64, 'U', 64, 32, 32, 3]},
     'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
     'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
