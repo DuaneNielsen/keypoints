@@ -261,6 +261,10 @@ def make_layers(cfg, batch_norm=False):
     return nn.Sequential(*layers)
 
 
+""" loss functions """
+
+
+#todo make perceptual loss work
 class PerceptualLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -296,6 +300,44 @@ class PerceptualLoss(nn.Module):
         self.update_target = True
         self.vgg16(target)
         return self._loss(x, target)
+
+#todo needs more work, does not work when 2 transforms are made to the image
+
+
+class FlowfieldDiscountedLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, source, target, flowfield):
+        loss = F.mse_loss(source, target, reduction='none')
+        bad_bits = flowfield ** 2
+        bad_bits[bad_bits <= 1.0] = 1.0
+        bad_bits[bad_bits > 1.0] = 0
+        mask = torch.prod(bad_bits, 3).expand(1, -1, -1, -1).permute(1, 0, 2, 3)
+        loss = loss * mask
+        return torch.sum(loss)
+
+
+class DiscountBlackLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, source, target):
+        """
+
+        Ignores pixels with all channels set to zero
+        Probably Not suitable for greyscale images
+
+        :param source: image from network
+        :param target: ground truth
+        :return: the loss
+        """
+        loss = F.mse_loss(source, target, reduction='none')
+        mask = torch.sum(target, dim=1, keepdim=True)
+        mask[mask > 0.0] = 1.0
+        mask[mask == 0.0] = 1e-6
+        loss = loss * mask
+        return torch.mean(loss), loss, mask
 
 
 class Identity(nn.Module):

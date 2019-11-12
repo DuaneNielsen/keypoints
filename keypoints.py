@@ -35,32 +35,39 @@ def save_model():
     torch.save(kp_network.keypoint.state_dict(), str(keypoint_block_save_path))
 
 
-view_in = UniImageViewer('in', screen_resolution=(128 * 3 * 4, 128 * 4))
+view_in = UniImageViewer('in', screen_resolution=(128 * 3 * 5, 128 * 5))
 
 
-def display(x, x_, k):
+def display(x, x_, k, *images):
     height, width = x.size(2), x.size(3)
     key_x, key_y = k
     kp_image = plot_keypoints_on_image((key_x.float(), key_y.float()), x_.float())
     kp_image = transforms.Resize((height, width))(kp_image)
     kp_image_t = transforms.ToTensor()(kp_image).to(device)
-    view_in.render(torch.cat((x[0].float(), x_[0].float(), x_t[0].float(), kp_image_t), dim=2))
+    panel = [x[0].float(), x_[0].float(), x_t[0].float(), kp_image_t]
+    for i in images:
+        panel.append(i[0].float())
+    panel = torch.cat(panel, dim=2)
+    view_in.render(panel)
+
 
 
 if __name__ == '__main__':
 
     """ config """
-    train_mode = True
-    reload = False
-    load_run_id = 4
-    run_id = 5
+    run_type = 'full'
+    train_mode = False
+    reload = True
+    load_run_id = 5
+    run_id = 6
     epochs = 800
     torchvision_data_root = 'data'
     model_name = 'vgg_kp_11'
+    precision = torch.float32
 
     """ hyper-parameters"""
-    batch_size = 96
-    lr = 0.1
+    batch_size = 32
+    lr = 0.01
 
     """ variables """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -75,8 +82,13 @@ if __name__ == '__main__':
 
     path = Path(torchvision_data_root + '/celeba-low')
     data = tv.datasets.ImageFolder(str(path), transform=transform)
-    train = torch.utils.data.Subset(data, range(190000))
-    test = torch.utils.data.Subset(data, range(190001, len(data)))
+    if run_type is 'full':
+        train = torch.utils.data.Subset(data, range(190000))
+        test = torch.utils.data.Subset(data, range(190001, len(data)))
+    else:
+        train = torch.utils.data.Subset(data, range(2000))
+        test = torch.utils.data.Subset(data, range(2001, 4001))
+
 
     train_l = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
@@ -85,10 +97,11 @@ if __name__ == '__main__':
     """ model """
     kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=10, init_weights=True).to(device)
 
-    kp_network.half()  # convert to half precision
-    for layer in kp_network.modules():
-        if isinstance(layer, nn.BatchNorm2d):
-            layer.float()
+    if precision is torch.half:
+        kp_network.half()  # convert to half precision
+        for layer in kp_network.modules():
+            if isinstance(layer, nn.BatchNorm2d):
+                layer.float()
 
     if reload:
         load_model()
@@ -99,7 +112,8 @@ if __name__ == '__main__':
     scheduler = ReduceLROnPlateau(optim, mode='min')
 
     """ loss function """
-    criterion = nn.MSELoss()
+    #criterion = nn.MSELoss()
+    criterion = models.DiscountBlackLoss()
 
     """ utils """
 
@@ -110,13 +124,13 @@ if __name__ == '__main__':
         batch = tqdm(train_l, total=len(train) // batch_size)
         for i, (x, _) in enumerate(batch):
             max_i = max_i if i < max_i else i
-            x = x.half().to(device)
-            x = tps_random(x, var=0.05)
-            x_ = tps_random(x, var=0.05)
+            x = x.type(dtype=precision).to(device)
+            x, _ = tps_random(x, var=0.05)
+            x_, flowfield = tps_random(x, var=0.05)
 
             optim.zero_grad()
             x_t, z, k = kp_network(x, x_)
-            loss = criterion(x_t, x_)
+            loss, loss_image, loss_mask = criterion(x_t, x_)
 
             if train_mode:
                 loss.backward()
@@ -128,7 +142,7 @@ if __name__ == '__main__':
             batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
 
             if not i % 8:
-                display(x, x_, k)
+                display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
 
         """ test  """
         with torch.no_grad():
@@ -136,16 +150,16 @@ if __name__ == '__main__':
             del ll
             ll = []
             for i, (x, _) in enumerate(batch):
-                x = x.half().to(device)
-                x = tps_random(x, var=0.05)
-                x_ = tps_random(x, var=0.05)
+                x = x.type(dtype=precision).to(device)
+                x, _ = tps_random(x, var=0.05)
+                x_, flowfield = tps_random(x, var=0.05)
 
                 x_t, z, k = kp_network(x, x_)
-                loss = criterion(x_t, x_)
+                loss, loss_image, loss_mask = criterion(x_t, x_)
                 ll.append(loss.detach().item())
                 batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
                 if not i % 8:
-                    display(x, x_, k)
+                    display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
 
         """ check improvement """
         ave_loss = stats.mean(ll)
