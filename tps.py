@@ -4,7 +4,8 @@
 # ============================================================
 
 import torch
-
+import torch.nn.functional as F
+from math import sin, cos
 
 def tps(theta, ctrl, grid):
     '''Evaluate the thin-plate-spline (TPS) surface at xy locations arranged in a grid.
@@ -118,12 +119,73 @@ def uniform_grid(shape):
     return c
 
 
-def tps_random(x, num_control_points=4, var=0.4):
+def tps_random(x, num_control_points=6, var=0.5):
     device = x.device
     theta = torch.randn(x.size(0), num_control_points + 3, 2) * var
     c = torch.rand(x.size(0), num_control_points, 2)
     grid = tps_grid(theta, c, x.shape).type_as(x).to(device)
-    return torch.nn.functional.grid_sample(x, grid, padding_mode='zeros'), grid
+    return F.grid_sample(x, grid, padding_mode='zeros')
+
+
+class RandomTPSTransform(object):
+    def __init__(self, num_control=4, variance=0.11):
+        self.num_control = num_control
+        self.var = variance
+
+    def __call__(self, x):
+        return tps_random(x, self.num_control, self.var)
+
+
+def rotate_affine_grid(x, theta):
+    theta = torch.tensor([
+        [cos(theta), sin(theta), 0.0],
+        [-sin(theta), cos(theta), 0.0]
+    ]).expand(x.size(0), -1, -1).to(x.device)
+
+    grid = F.affine_grid(theta, x.shape)
+    return F.grid_sample(x, grid, padding_mode='zeros')
+
+def rotate_affine_grid_multi(x, theta):
+    theta = theta.to(x.device)
+    cos_theta = torch.cos(theta)
+    sin_theta = torch.sin(theta)
+
+    transform = torch.zeros(x.size(0), 2, 3)
+    transform[:, 0, 0] = cos_theta
+    transform[:, 0, 1] = sin_theta
+    transform[:, 1, 0] = - sin_theta
+    transform[:, 1, 1] = cos_theta
+
+    grid = F.affine_grid(transform, x.shape).to(x.device)
+    return F.grid_sample(x, grid, padding_mode='zeros')
+
+
+class Rotate(object):
+    def __init__(self, theta=0.2):
+        self.theta = theta
+
+    def __call__(self, x):
+
+        return rotate_affine_grid(x, self.theta)
+
+
+class RotateMulti(object):
+    def __init__(self, theta=0.2):
+        self.theta = theta
+
+    def __call__(self, x):
+        theta = torch.full((x.size(0), ) ,self.theta, device=x.device)
+        return rotate_affine_grid_multi(x, theta)
+
+
+class RandRotate(object):
+    def __init__(self, max=0.2):
+        self.max = max
+
+    def __call__(self, x):
+        theta = torch.rand(x.size(0)) * 2 - 1
+        theta = theta * self.max
+        return rotate_affine_grid_multi(x, theta)
 
 
 if __name__ == '__main__':

@@ -7,11 +7,11 @@ from pathlib import Path
 from colorama import Fore, Style
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
-import torch.nn as nn
 import statistics as stats
 import models
 from utils import get_lr, UniImageViewer, plot_keypoints_on_image
-from tps import tps_random
+from tps import RandomTPSTransform, RandRotate
+from apex import amp
 
 
 def load_model():
@@ -35,7 +35,7 @@ def save_model():
     torch.save(kp_network.keypoint.state_dict(), str(keypoint_block_save_path))
 
 
-view_in = UniImageViewer('in', screen_resolution=(128 * 3 * 5, 128 * 5))
+view_in = UniImageViewer('in', screen_resolution=(128 * 5 * 4, 128 * 4))
 
 
 def display(x, x_, k, *images):
@@ -55,19 +55,21 @@ def display(x, x_, k, *images):
 if __name__ == '__main__':
 
     """ config """
+    #  run type = 'full' | 'short'
     run_type = 'full'
-    train_mode = False
-    reload = True
+    train_mode = True
+    reload = False
     load_run_id = 5
-    run_id = 6
+    run_id = 8
     epochs = 800
     torchvision_data_root = 'data'
     model_name = 'vgg_kp_11'
-    precision = torch.float32
+    # Apex Mixed precision Initialization
+    opt_level = 'O1'
 
     """ hyper-parameters"""
-    batch_size = 32
-    lr = 0.01
+    batch_size = 96
+    lr = 0.1
 
     """ variables """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -78,6 +80,11 @@ if __name__ == '__main__':
     transform = transforms.Compose([
         transforms.Resize((128, 128)),
         transforms.ToTensor(),
+    ])
+
+    peturb = transforms.Compose([
+        RandRotate(),
+        RandomTPSTransform()
     ])
 
     path = Path(torchvision_data_root + '/celeba-low')
@@ -92,16 +99,9 @@ if __name__ == '__main__':
 
     train_l = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
-    classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     """ model """
     kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=10, init_weights=True).to(device)
-
-    if precision is torch.half:
-        kp_network.half()  # convert to half precision
-        for layer in kp_network.modules():
-            if isinstance(layer, nn.BatchNorm2d):
-                layer.float()
 
     if reload:
         load_model()
@@ -110,6 +110,9 @@ if __name__ == '__main__':
     # optim = Adam(kp_network.parameters(), lr=1e-4)
     optim = SGD(kp_network.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
     scheduler = ReduceLROnPlateau(optim, mode='min')
+
+    """ apex """
+    model, optimizer = amp.initialize(kp_network, optim, opt_level=opt_level)
 
     """ loss function """
     #criterion = nn.MSELoss()
@@ -124,16 +127,17 @@ if __name__ == '__main__':
         batch = tqdm(train_l, total=len(train) // batch_size)
         for i, (x, _) in enumerate(batch):
             max_i = max_i if i < max_i else i
-            x = x.type(dtype=precision).to(device)
-            x, _ = tps_random(x, var=0.05)
-            x_, flowfield = tps_random(x, var=0.05)
+            x = x.to(device)
+            x = peturb(x)
+            x_ = peturb(x)
 
             optim.zero_grad()
             x_t, z, k = kp_network(x, x_)
             loss, loss_image, loss_mask = criterion(x_t, x_)
 
             if train_mode:
-                loss.backward()
+                with amp.scale_loss(loss, optim) as scaled_loss:
+                    scaled_loss.backward()
                 optim.step()
 
             ll.append(loss.item())
@@ -150,9 +154,9 @@ if __name__ == '__main__':
             del ll
             ll = []
             for i, (x, _) in enumerate(batch):
-                x = x.type(dtype=precision).to(device)
-                x, _ = tps_random(x, var=0.05)
-                x_, flowfield = tps_random(x, var=0.05)
+                x = x.to(device)
+                x = peturb(x)
+                x_ = peturb(x)
 
                 x_t, z, k = kp_network(x, x_)
                 loss, loss_image, loss_mask = criterion(x_t, x_)
