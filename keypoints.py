@@ -12,6 +12,9 @@ import models
 from utils import get_lr, UniImageViewer, plot_keypoints_on_image
 from tps import RandomTPSTransform, RandRotate
 from apex import amp
+import logging
+
+logging.basicConfig(filename='keypoints.log', filemode='a', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 
 def load_model():
@@ -55,21 +58,26 @@ def display(x, x_, k, *images):
 if __name__ == '__main__':
 
     """ config """
-    #  run type = 'full' | 'short'
-    run_type = 'full'
+    #  run type = 'full' | 'small' | 'short'
+    run_type = 'small'
     train_mode = True
-    reload = False
-    load_run_id = 5
-    run_id = 8
+    reload = True
+    load_run_id = 8
+    run_id = 9
     epochs = 800
     torchvision_data_root = 'data'
     model_name = 'vgg_kp_11'
     # Apex Mixed precision Initialization
     opt_level = 'O1'
+    dataset = '/celeba-low'
 
     """ hyper-parameters"""
     batch_size = 96
     lr = 0.1
+
+    logging.debug(f'STARTING RUN: {run_id}, model_name: {model_name}, run_type: {run_type}, '
+                  f'batch_size: {batch_size}, lr {lr}, '
+                  f'opt_level: {opt_level}, dataset: {dataset}')
 
     """ variables """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -87,14 +95,17 @@ if __name__ == '__main__':
         RandomTPSTransform()
     ])
 
-    path = Path(torchvision_data_root + '/celeba-low')
+    path = Path(torchvision_data_root + dataset)
     data = tv.datasets.ImageFolder(str(path), transform=transform)
     if run_type is 'full':
         train = torch.utils.data.Subset(data, range(190000))
         test = torch.utils.data.Subset(data, range(190001, len(data)))
+    elif run_type is 'small':
+        train = torch.utils.data.Subset(data, range(10000))
+        test = torch.utils.data.Subset(data, range(10001, 11001))
     else:
         train = torch.utils.data.Subset(data, range(2000))
-        test = torch.utils.data.Subset(data, range(2001, 4001))
+        test = torch.utils.data.Subset(data, range(2001, 2501))
 
 
     train_l = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
@@ -170,7 +181,10 @@ if __name__ == '__main__':
         scheduler.step(ave_loss)
 
         best_loss = ave_loss if ave_loss <= best_loss else best_loss
-        print(f'{Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}')
+        mesg = f'{Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}'
+        print(mesg)
+        logging.debug(mesg)
+
 
         """ save if model improved """
         if ave_loss <= best_loss and train_mode:
