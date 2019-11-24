@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import torchvision as tv
 from torchvision import transforms
 from torch.utils.data import DataLoader
@@ -13,6 +14,7 @@ from utils import get_lr, UniImageViewer, plot_keypoints_on_image
 from tps import RandomTPSTransform, RandRotate
 from apex import amp
 import logging
+from benchmark import SquareDataset
 
 logging.basicConfig(filename='keypoints.log', filemode='a', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
@@ -62,14 +64,15 @@ if __name__ == '__main__':
     run_type = 'small'
     train_mode = True
     reload = True
-    load_run_id = 8
-    run_id = 9
+    load_run_id = 9
+    run_id = 10
     epochs = 800
     torchvision_data_root = 'data'
     model_name = 'vgg_kp_11'
     # Apex Mixed precision Initialization
     opt_level = 'O1'
     dataset = '/celeba-low'
+    num_keypoints = 4
 
     """ hyper-parameters"""
     batch_size = 96
@@ -96,7 +99,9 @@ if __name__ == '__main__':
     ])
 
     path = Path(torchvision_data_root + dataset)
-    data = tv.datasets.ImageFolder(str(path), transform=transform)
+    #data = tv.datasets.ImageFolder(str(path), transform=transform)
+    data = SquareDataset(size=200000, transform=transforms.ToTensor())
+
     if run_type is 'full':
         train = torch.utils.data.Subset(data, range(190000))
         test = torch.utils.data.Subset(data, range(190001, len(data)))
@@ -112,7 +117,7 @@ if __name__ == '__main__':
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
     """ model """
-    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=10, init_weights=True).to(device)
+    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=num_keypoints, init_weights=True).to(device)
 
     if reload:
         load_model()
@@ -126,8 +131,8 @@ if __name__ == '__main__':
     model, optimizer = amp.initialize(kp_network, optim, opt_level=opt_level)
 
     """ loss function """
-    #criterion = nn.MSELoss()
-    criterion = models.DiscountBlackLoss()
+    criterion = nn.MSELoss()
+    #criterion = models.DiscountBlackLoss()
 
     """ utils """
 
@@ -144,7 +149,8 @@ if __name__ == '__main__':
 
             optim.zero_grad()
             x_t, z, k = kp_network(x, x_)
-            loss, loss_image, loss_mask = criterion(x_t, x_)
+            loss = criterion(x_t, x_)
+            #loss, loss_image, loss_mask = criterion(x_t, x_)
 
             if train_mode:
                 with amp.scale_loss(loss, optim) as scaled_loss:
@@ -157,7 +163,8 @@ if __name__ == '__main__':
             batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
 
             if not i % 8:
-                display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
+                display(x, x_, k)
+                #display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
 
         """ test  """
         with torch.no_grad():
@@ -170,18 +177,20 @@ if __name__ == '__main__':
                 x_ = peturb(x)
 
                 x_t, z, k = kp_network(x, x_)
-                loss, loss_image, loss_mask = criterion(x_t, x_)
+                loss = criterion(x_t, x_)
+                #loss, loss_image, loss_mask = criterion(x_t, x_)
                 ll.append(loss.detach().item())
                 batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
                 if not i % 8:
-                    display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
+                    display(x, x_, k)
+                    #display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
 
         """ check improvement """
         ave_loss = stats.mean(ll)
         scheduler.step(ave_loss)
 
         best_loss = ave_loss if ave_loss <= best_loss else best_loss
-        mesg = f'{Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}'
+        mesg = f'{Fore.GREEN}EPOCH {epoch} LR: {get_lr(optimizer)} {Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}'
         print(mesg)
         logging.debug(mesg)
 
