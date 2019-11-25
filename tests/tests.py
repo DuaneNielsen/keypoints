@@ -14,18 +14,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 from utils import plot_keypoints_on_image, UniImageViewer
 import torchvision.transforms as tvt
-
-
-""" DATA  """
-
-
-def bad_monkey(copies=1):
-    p = Path('/home/duane/tv-data/bad_monkey.jpg')
-    assert p.exists()
-    x = cv2.imread(str(p))
-    x = ToTensor()(x).expand(copies, -1, -1, -1)
-    return x
-
+from tests.common import bad_monkey
 
 def test_plot():
     z = np.array([[x**2 + y**2 for x in range(20)] for y in range(20)])

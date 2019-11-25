@@ -5,6 +5,7 @@ import benchmark as b
 from benchmark import Pos, SquareDataset
 from torch.utils.data import DataLoader
 
+
 def test_render_square():
     a3 = b.square(Pos(40, 40), Pos(50, 50))
     im = np.zeros([128, 128, 3], dtype=np.uint8)

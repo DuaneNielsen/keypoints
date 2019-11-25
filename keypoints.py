@@ -10,13 +10,11 @@ from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 import statistics as stats
 import models
-from utils import get_lr, UniImageViewer, plot_keypoints_on_image
+from utils import get_lr, ResultsLogger
 from tps import RandomTPSTransform, RandRotate
 from apex import amp
 import logging
 from benchmark import SquareDataset
-
-logging.basicConfig(filename='keypoints.log', filemode='a', format='%(name)s - %(levelname)s - %(message)s', level=logging.DEBUG)
 
 
 def load_model():
@@ -40,67 +38,24 @@ def save_model():
     torch.save(kp_network.keypoint.state_dict(), str(keypoint_block_save_path))
 
 
-view_in = UniImageViewer('in', screen_resolution=(128 * 5 * 4, 128 * 4))
+class ConfigException(Exception):
+    pass
 
 
-def display(x, x_, k, *images):
-    height, width = x.size(2), x.size(3)
-    key_x, key_y = k
-    kp_image = plot_keypoints_on_image((key_x.float(), key_y.float()), x_.float())
-    kp_image = transforms.Resize((height, width))(kp_image)
-    kp_image_t = transforms.ToTensor()(kp_image).to(device)
-    panel = [x[0].float(), x_[0].float(), x_t[0].float(), kp_image_t]
-    for i in images:
-        panel.append(i[0].float())
-    panel = torch.cat(panel, dim=2)
-    view_in.render(panel)
+def get_dataset(dataset, run_type):
 
-
-
-if __name__ == '__main__':
-
-    """ config """
-    #  run type = 'full' | 'small' | 'short'
-    run_type = 'small'
-    train_mode = True
-    reload = True
-    load_run_id = 9
-    run_id = 10
-    epochs = 800
-    torchvision_data_root = 'data'
-    model_name = 'vgg_kp_11'
-    # Apex Mixed precision Initialization
-    opt_level = 'O1'
-    dataset = '/celeba-low'
-    num_keypoints = 4
-
-    """ hyper-parameters"""
-    batch_size = 96
-    lr = 0.1
-
-    logging.debug(f'STARTING RUN: {run_id}, model_name: {model_name}, run_type: {run_type}, '
-                  f'batch_size: {batch_size}, lr {lr}, '
-                  f'opt_level: {opt_level}, dataset: {dataset}')
-
-    """ variables """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    best_loss = 100.0
-    max_i = 0
-
-    """ data """
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.ToTensor(),
-    ])
-
-    peturb = transforms.Compose([
-        RandRotate(),
-        RandomTPSTransform()
-    ])
-
-    path = Path(torchvision_data_root + dataset)
-    #data = tv.datasets.ImageFolder(str(path), transform=transform)
-    data = SquareDataset(size=200000, transform=transforms.ToTensor())
+    if dataset is '/celeba-low':
+        path = Path(torchvision_data_root + dataset)
+        """ celeba a transforms """
+        transform = transforms.Compose([
+            transforms.Resize((128, 128)),
+            transforms.ToTensor(),
+        ])
+        data = tv.datasets.ImageFolder(str(path), transform=transform)
+    elif dataset is 'square':
+        data = SquareDataset(size=200000, transform=transforms.ToTensor())
+    else:
+        raise ConfigException('pick a dataset')
 
     if run_type is 'full':
         train = torch.utils.data.Subset(data, range(190000))
@@ -108,13 +63,53 @@ if __name__ == '__main__':
     elif run_type is 'small':
         train = torch.utils.data.Subset(data, range(10000))
         test = torch.utils.data.Subset(data, range(10001, 11001))
-    else:
+    elif run_type is 'short':
         train = torch.utils.data.Subset(data, range(2000))
         test = torch.utils.data.Subset(data, range(2001, 2501))
+    else:
+        raise ConfigException('pick a run type')
+
+    return train, test
 
 
+if __name__ == '__main__':
+
+    """ config """
+    #  run type = 'full' | 'small' | 'short'
+    run_type = 'short'
+    train_mode = True
+    reload = True
+    load_run_id = 11
+    run_id = 12
+    epochs = 800
+    torchvision_data_root = 'data'
+    model_name = 'vgg_kp_11'
+    # Apex Mixed precision Initialization
+    opt_level = 'O0'
+    # dataset = '/celeba-low' | 'square'
+    #dataset = '/celeba-low'
+    dataset = 'square'
+    num_keypoints = 4
+
+    """ hyper-parameters """
+    batch_size = 32
+    lr = 0.001
+
+    """ variables """
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    display = ResultsLogger(title='Results')
+    display.header(run_id, model_name, run_type, batch_size, lr, opt_level, dataset, num_keypoints)
+
+    """ dataset """
+    train, test = get_dataset(dataset, run_type)
     train_l = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
+
+    """ data augmentation"""
+    peturb = transforms.Compose([
+        RandRotate(),
+        RandomTPSTransform()
+    ])
 
     """ model """
     kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=num_keypoints, init_weights=True).to(device)
@@ -136,13 +131,12 @@ if __name__ == '__main__':
 
     """ utils """
 
-    for epoch in range(reload + 1, reload + epochs):
+    for epoch in range(1, epochs):
 
         ll = []
         """ training """
         batch = tqdm(train_l, total=len(train) // batch_size)
         for i, (x, _) in enumerate(batch):
-            max_i = max_i if i < max_i else i
             x = x.to(device)
             x = peturb(x)
             x_ = peturb(x)
@@ -157,19 +151,11 @@ if __name__ == '__main__':
                     scaled_loss.backward()
                 optim.step()
 
-            ll.append(loss.item())
-            if len(ll) > 20:
-                ll.pop(0)
-            batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
-
-            if not i % 8:
-                display(x, x_, k)
-                #display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
+            display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, type='Train')
 
         """ test  """
         with torch.no_grad():
             batch = tqdm(test_l, total=len(test) // batch_size)
-            del ll
             ll = []
             for i, (x, _) in enumerate(batch):
                 x = x.to(device)
@@ -178,23 +164,12 @@ if __name__ == '__main__':
 
                 x_t, z, k = kp_network(x, x_)
                 loss = criterion(x_t, x_)
-                #loss, loss_image, loss_mask = criterion(x_t, x_)
-                ll.append(loss.detach().item())
-                batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
-                if not i % 8:
-                    display(x, x_, k)
-                    #display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
 
-        """ check improvement """
-        ave_loss = stats.mean(ll)
-        scheduler.step(ave_loss)
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, type='Test')
 
-        best_loss = ave_loss if ave_loss <= best_loss else best_loss
-        mesg = f'{Fore.GREEN}EPOCH {epoch} LR: {get_lr(optimizer)} {Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}'
-        print(mesg)
-        logging.debug(mesg)
+            ave_loss, best_loss = display.end_epoch(epoch, optim)
+            scheduler.step(ave_loss)
 
-
-        """ save if model improved """
-        if ave_loss <= best_loss and train_mode:
-            save_model()
+            """ save if model improved """
+            if ave_loss <= best_loss and train_mode:
+                save_model()

@@ -1,7 +1,6 @@
 import collections
 import numpy as np
 import cv2
-import torch
 import torch.utils.data
 
 Pos = collections.namedtuple('Pos', 'x, y')
@@ -33,29 +32,18 @@ def image(poly, screensize, color=(255, 255, 255)):
     return im
 
 
-class SquareDataset(torch.utils.data.IterableDataset):
+class SquareDataset(torch.utils.data.dataset.Dataset):
     def __init__(self, size, transform=None):
         super().__init__()
         self.size = size
-        self.n = 0
         self.poly = Square(Pos(40, 40), Pos(50, 50))
         self.transform = transform
 
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.n < self.size:
-            self.n += 1
-            img = image(self.poly, screensize=(128, 128), color=(255, 255, 255))
-            if self.transform:
-                img = self.transform(img)
-            return img, img
-        else:
-            raise StopIteration()
-
     def __getitem__(self, item):
-        return next(self)
+        img = image(self.poly, screensize=(128, 128), color=(255, 255, 255))
+        if self.transform:
+            img = self.transform(img)
+        return img, img
 
     def __len__(self):
         return self.size
