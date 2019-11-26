@@ -5,15 +5,12 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
-from colorama import Fore, Style
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
-import statistics as stats
 import models
-from utils import get_lr, ResultsLogger
+from utils import ResultsLogger
 from tps import RandomTPSTransform, RandRotate
 from apex import amp
-import logging
 from benchmark import SquareDataset
 import argparse
 
@@ -77,7 +74,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='keypoint detection demo')
 
+    """ config """
     parser.add_argument('--run_id', type=int, required=True)
+    parser.add_argument('--comment', type=str, default='')
     parser.add_argument('--run_type', type=str, default='short')
     parser.add_argument('--train_mode', type=bool, default='True')
     parser.add_argument('--reload', type=int, default=0)
@@ -87,6 +86,9 @@ if __name__ == '__main__':
     parser.add_argument('--opt_level', type=str, default='O0')
     parser.add_argument('--dataset', type=str, default='square')
     parser.add_argument('--num_keypoints', type=int, default=4)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    parser.add_argument('--device', type=str, default=device)
+    parser.add_argument('--display', action='store_true')
 
     """ hyper-parameters """
     parser.add_argument('--batch_size', type=int, default=32)
@@ -95,9 +97,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     """ variables """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    display = ResultsLogger(title='Results')
-    display.header(args.run_id, args.model_name, args.run_type, args.batch_size, args.lr, args.opt_level, args.dataset, args.num_keypoints)
+    display = ResultsLogger(title='Results', visuals=args.display)
+    display.header(args.run_id, args.comment, args.model_name, args.run_type, args.batch_size, args.lr, args.opt_level, args.dataset, args.num_keypoints)
 
     """ dataset """
     train, test = get_dataset(args.dataset, args.run_type)
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     ])
 
     """ model """
-    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=args.num_keypoints, init_weights=True).to(device)
+    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=args.num_keypoints, init_weights=True).to(args.device)
 
     if args.reload != 0:
         load_model(args.model_name, args.reload)
@@ -134,7 +135,7 @@ if __name__ == '__main__':
         """ training """
         batch = tqdm(train_l, total=len(train) // args.batch_size)
         for i, (x, _) in enumerate(batch):
-            x = x.to(device)
+            x = x.to(args.device)
             x = peturb(x)
             x_ = peturb(x)
 
@@ -155,7 +156,7 @@ if __name__ == '__main__':
             batch = tqdm(test_l, total=len(test) // args.batch_size)
             ll = []
             for i, (x, _) in enumerate(batch):
-                x = x.to(device)
+                x = x.to(args.device)
                 x = peturb(x)
                 x_ = peturb(x)
 

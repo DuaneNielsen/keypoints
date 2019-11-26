@@ -36,21 +36,21 @@ def color_map():
 
 
 class ResultsLogger(object):
-    def __init__(self, title='title', logfile='keypoints.log'):
+    def __init__(self, title='title', logfile='keypoints.log', visuals=True):
         super().__init__()
         self.ll = []
         self.scale = 4
         self.viewer = UniImageViewer(title, screen_resolution=(128 * 5 * self.scale, 128 * self.scale))
         self.logging = logging
         self.best_loss = 1e10
-        self.visuals = True
+        self.visuals = visuals
         logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s',
                             level=logging.DEBUG, handlers=[logging.FileHandler(logfile, 'a', 'utf-8')])
 
-    def header(self, run_id, model_name, run_type, batch_size, lr, opt_level, dataset, num_keypoints):
+    def header(self, run_id, comment, model_name, run_type, batch_size, lr, opt_level, dataset, num_keypoints):
         self.logging.debug(f'STARTING RUN: {run_id}, model_name: {model_name}, run_type: {run_type}, '
                            f'batch_size: {batch_size}, lr {lr}, '
-                           f'opt_level: {opt_level}, dataset: {dataset}, keypoints: {num_keypoints}')
+                           f'opt_level: {opt_level}, dataset: {dataset}, keypoints: {num_keypoints} {comment}')
 
     def display(self, x, x_, x_t, k, *images, blocking=False):
         key_x, key_y = k
