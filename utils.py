@@ -43,6 +43,7 @@ class ResultsLogger(object):
         self.viewer = UniImageViewer(title, screen_resolution=(128 * 5 * self.scale, 128 * self.scale))
         self.logging = logging
         self.best_loss = 1e10
+        self.visuals = True
         logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s',
                             level=logging.DEBUG, handlers=[logging.FileHandler(logfile, 'a', 'utf-8')])
 
@@ -67,7 +68,7 @@ class ResultsLogger(object):
             self.ll.pop(0)
         tqdm.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} {type} Loss: {stats.mean(self.ll)}')
 
-        if not batch_i % 8:
+        if self.visuals and not batch_i % 8:
             self.display(x, x_, x_t, k)
             # display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
 

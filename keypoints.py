@@ -15,9 +15,10 @@ from tps import RandomTPSTransform, RandRotate
 from apex import amp
 import logging
 from benchmark import SquareDataset
+import argparse
 
 
-def load_model():
+def load_model(model_name, load_run_id):
     encoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/encoder.mdl')
     decoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/decoder.mdl')
     keypoint_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/keypoint.mdl')
@@ -26,7 +27,7 @@ def load_model():
     kp_network.keypoint.load_state_dict(torch.load(str(keypoint_block_load_path)))
 
 
-def save_model():
+def save_model(model_name, run_id):
     encoder_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/encoder.mdl')
     decoder_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/decoder.mdl')
     keypoint_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/keypoint.mdl')
@@ -45,7 +46,7 @@ class ConfigException(Exception):
 def get_dataset(dataset, run_type):
 
     if dataset is '/celeba-low':
-        path = Path(torchvision_data_root + dataset)
+        path = Path(args.data_root + dataset)
         """ celeba a transforms """
         transform = transforms.Compose([
             transforms.Resize((128, 128)),
@@ -74,36 +75,34 @@ def get_dataset(dataset, run_type):
 
 if __name__ == '__main__':
 
-    """ config """
-    #  run type = 'full' | 'small' | 'short'
-    run_type = 'short'
-    train_mode = True
-    reload = True
-    load_run_id = 11
-    run_id = 12
-    epochs = 800
-    torchvision_data_root = 'data'
-    model_name = 'vgg_kp_11'
-    # Apex Mixed precision Initialization
-    opt_level = 'O0'
-    # dataset = '/celeba-low' | 'square'
-    #dataset = '/celeba-low'
-    dataset = 'square'
-    num_keypoints = 4
+    parser = argparse.ArgumentParser(description='keypoint detection demo')
+
+    parser.add_argument('--run_id', type=int, required=True)
+    parser.add_argument('--run_type', type=str, default='short')
+    parser.add_argument('--train_mode', type=bool, default='True')
+    parser.add_argument('--reload', type=int, default=0)
+    parser.add_argument('--epochs', type=int, default=800)
+    parser.add_argument('--model_name', type=str, default='vgg_kp_11')
+    parser.add_argument('--data_root', type=str, default='data')
+    parser.add_argument('--opt_level', type=str, default='O0')
+    parser.add_argument('--dataset', type=str, default='square')
+    parser.add_argument('--num_keypoints', type=int, default=4)
 
     """ hyper-parameters """
-    batch_size = 32
-    lr = 0.001
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=0.01)
+
+    args = parser.parse_args()
 
     """ variables """
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     display = ResultsLogger(title='Results')
-    display.header(run_id, model_name, run_type, batch_size, lr, opt_level, dataset, num_keypoints)
+    display.header(args.run_id, args.model_name, args.run_type, args.batch_size, args.lr, args.opt_level, args.dataset, args.num_keypoints)
 
     """ dataset """
-    train, test = get_dataset(dataset, run_type)
-    train_l = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
-    test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True, pin_memory=True)
+    train, test = get_dataset(args.dataset, args.run_type)
+    train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
+    test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
     """ data augmentation"""
     peturb = transforms.Compose([
@@ -112,30 +111,28 @@ if __name__ == '__main__':
     ])
 
     """ model """
-    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=num_keypoints, init_weights=True).to(device)
+    kp_network = models.vgg11_bn_keypoint(sigma=0.1, num_keypoints=args.num_keypoints, init_weights=True).to(device)
 
-    if reload:
-        load_model()
+    if args.reload != 0:
+        load_model(args.model_name, args.reload)
 
     """ optimizer """
     # optim = Adam(kp_network.parameters(), lr=1e-4)
-    optim = SGD(kp_network.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+    optim = SGD(kp_network.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
     scheduler = ReduceLROnPlateau(optim, mode='min')
 
     """ apex """
-    model, optimizer = amp.initialize(kp_network, optim, opt_level=opt_level)
+    model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
 
     """ loss function """
     criterion = nn.MSELoss()
     #criterion = models.DiscountBlackLoss()
 
-    """ utils """
-
-    for epoch in range(1, epochs):
+    for epoch in range(1, args.epochs):
 
         ll = []
         """ training """
-        batch = tqdm(train_l, total=len(train) // batch_size)
+        batch = tqdm(train_l, total=len(train) // args.batch_size)
         for i, (x, _) in enumerate(batch):
             x = x.to(device)
             x = peturb(x)
@@ -146,7 +143,7 @@ if __name__ == '__main__':
             loss = criterion(x_t, x_)
             #loss, loss_image, loss_mask = criterion(x_t, x_)
 
-            if train_mode:
+            if args.train_mode:
                 with amp.scale_loss(loss, optim) as scaled_loss:
                     scaled_loss.backward()
                 optim.step()
@@ -155,7 +152,7 @@ if __name__ == '__main__':
 
         """ test  """
         with torch.no_grad():
-            batch = tqdm(test_l, total=len(test) // batch_size)
+            batch = tqdm(test_l, total=len(test) // args.batch_size)
             ll = []
             for i, (x, _) in enumerate(batch):
                 x = x.to(device)
@@ -171,5 +168,5 @@ if __name__ == '__main__':
             scheduler.step(ave_loss)
 
             """ save if model improved """
-            if ave_loss <= best_loss and train_mode:
-                save_model()
+            if ave_loss <= best_loss and args.train_mode:
+                save_model(args.model_name, args.run_id)
