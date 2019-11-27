@@ -81,14 +81,16 @@ if __name__ == '__main__':
     parser.add_argument('--train_mode', type=bool, default='True')
     parser.add_argument('--reload', type=int, default=0)
     parser.add_argument('--epochs', type=int, default=800)
-    parser.add_argument('--model_name', type=str, default='vgg_kp_11')
     parser.add_argument('--data_root', type=str, default='data')
     parser.add_argument('--opt_level', type=str, default='O0')
     parser.add_argument('--dataset', type=str, default='square')
-    parser.add_argument('--num_keypoints', type=int, default=4)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--device', type=str, default=device)
     parser.add_argument('--display', action='store_true')
+
+    """ model parameters """
+    parser.add_argument('--model_name', type=str, default='vgg_kp_11')
+    parser.add_argument('--num_keypoints', type=int, default=4)
 
     """ hyper-parameters """
     parser.add_argument('--batch_size', type=int, default=32)
@@ -97,7 +99,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     """ variables """
-    display = ResultsLogger(title='Results', visuals=args.display)
+    display = ResultsLogger(model_name=args.model_name, run_id=args.run_id, title='Results', visuals=args.display, comment=args.comment)
     display.header(args.run_id, args.comment, args.model_name, args.run_type, args.batch_size, args.lr, args.opt_level, args.dataset, args.num_keypoints)
 
     """ dataset """

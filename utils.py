@@ -1,16 +1,12 @@
 import torch
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
 from PIL import Image
-import matplotlib
 import statistics as stats
 import torchvision.transforms as transforms
 from colorama import Fore, Style
 import logging
+from torch.utils.tensorboard import SummaryWriter
 
 colormap = ["FF355E",
             "8ffe09",
@@ -36,7 +32,7 @@ def color_map():
 
 
 class ResultsLogger(object):
-    def __init__(self, title='title', logfile='keypoints.log', visuals=True):
+    def __init__(self, model_name, run_id,  comment='', title='title', logfile='keypoints.log', visuals=True):
         super().__init__()
         self.ll = []
         self.scale = 4
@@ -46,13 +42,22 @@ class ResultsLogger(object):
         self.visuals = visuals
         logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s',
                             level=logging.DEBUG, handlers=[logging.FileHandler(logfile, 'a', 'utf-8')])
+        self.step = 0
+        if comment is not '':
+            self.tb = SummaryWriter(log_dir=f'data/keypoint_net/{model_name}/run{str(run_id)}'
+                                    , comment=comment)
+        else:
+            self.tb = None
 
     def header(self, run_id, comment, model_name, run_type, batch_size, lr, opt_level, dataset, num_keypoints):
-        self.logging.debug(f'STARTING RUN: {run_id}, model_name: {model_name}, run_type: {run_type}, '
-                           f'batch_size: {batch_size}, lr {lr}, '
-                           f'opt_level: {opt_level}, dataset: {dataset}, keypoints: {num_keypoints} {comment}')
+        mesg = f'STARTING RUN: {run_id}, comment: {comment}, model_name: {model_name}, run_type: {run_type}, ' \
+               f'batch_size: {batch_size}, lr {lr},' \
+               f'opt_level: {opt_level}, dataset: {dataset}, keypoints: {num_keypoints} {comment}'
+        self.logging.debug(mesg)
+        if self.tb:
+            self.tb.add_text(mesg, 'Config', global_step=0)
 
-    def display(self, x, x_, x_t, k, *images, blocking=False):
+    def build_panel(self, x, x_, x_t, k, *images):
         key_x, key_y = k
         kp_image = plot_keypoints_on_image((key_x.float(), key_y.float()), x_.float())
         kp_image_t = transforms.ToTensor()(kp_image).to(x.device)
@@ -60,6 +65,9 @@ class ResultsLogger(object):
         for i in images:
             panel.append(i[0].float())
         panel = torch.cat(panel, dim=2)
+        return panel
+
+    def display(self, panel, blocking=False):
         self.viewer.render(panel, blocking)
 
     def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, k, type, depth=None):
@@ -68,9 +76,18 @@ class ResultsLogger(object):
             self.ll.pop(0)
         tqdm.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} {type} Loss: {stats.mean(self.ll)}')
 
-        if self.visuals and not batch_i % 8:
-            self.display(x, x_, x_t, k)
+        if self.tb:
+            self.tb.add_scalar(f'{type} loss', loss.item(), global_step=self.step)
+
+        if not batch_i % 8:
+            panel = self.build_panel(x, x_, x_t, k)
             # display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
+            if self.visuals:
+                self.display(panel)
+            if self.tb:
+                self.tb.add_image(f'{type} panel', panel, global_step=self.step)
+
+        self.step += 1
 
     def end_epoch(self, epoch, optim):
 
@@ -203,38 +220,3 @@ def plot_keypoints_on_image(k, image_tensor, radius=2, thickness=1, batch_index=
     img_pil = Image.fromarray(img)
 
     return img_pil
-
-
-# def plot_keypoints_on_image(k, image_tensor, batch_index=torch.tensor([0], dtype=torch.long)):
-#     height, width = image_tensor.size(2), image_tensor.size(3)
-#     image_tensor = torch.cat(torch.unbind(image_tensor[batch_index], 0), dim=2)
-#     x, y = k
-#     x, y = x[batch_index].detach().squeeze().cpu().numpy(), y[batch_index].detach().squeeze().cpu().numpy()
-#
-#     fig = Figure()
-#     canvas = FigureCanvas(fig)
-#     ax = fig.gca()
-#
-#     ax.axis('off')
-#     ax.margins(0)
-#     ax.set_xlim(0.0, width)
-#     ax.set_ylim(height, 0.0)
-#     ax.xaxis.set_major_locator(matplotlib.ticker.NullLocator())
-#     ax.yaxis.set_major_locator(matplotlib.ticker.NullLocator())
-#     ax.get_xaxis().set_visible(False)
-#     ax.get_yaxis().set_visible(False)
-#     plt.autoscale(tight=True)
-#     fig.tight_layout()
-#     ax.imshow(image_tensor.permute(1, 2, 0).cpu(), zorder=1)
-#     cluster = list(Line2D.filled_markers)[:x.shape[0]]
-#     offset = 0
-#     for i in range(batch_index.size(0)):
-#         for xp, yp, m in zip(x, y, cluster):
-#             ax.scatter(xp * width + offset, yp * height, marker=m, zorder=2)
-#         canvas.draw()
-#         offset += width
-#
-#     s = canvas.tostring_rgb()
-#
-#     # return PIL image.
-#     return Image.frombytes("RGB", fig.canvas.get_width_height(), s)
