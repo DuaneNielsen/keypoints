@@ -131,7 +131,7 @@ if __name__ == '__main__':
     criterion = nn.MSELoss()
     #criterion = models.DiscountBlackLoss()
 
-    for epoch in range(1, args.epochs):
+    for epoch in range(1, args.epochs + 1):
 
         ll = []
         """ training """
