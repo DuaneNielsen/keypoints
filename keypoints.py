@@ -55,15 +55,18 @@ def get_dataset(dataset, run_type):
     else:
         raise ConfigException('pick a dataset')
 
-    if run_type is 'full':
+    if run_type == 'full':
         train = torch.utils.data.Subset(data, range(190000))
         test = torch.utils.data.Subset(data, range(190001, len(data)))
-    elif run_type is 'small':
+    elif run_type == 'small':
         train = torch.utils.data.Subset(data, range(10000))
         test = torch.utils.data.Subset(data, range(10001, 11001))
-    elif run_type is 'short':
+    elif run_type == 'short':
         train = torch.utils.data.Subset(data, range(2000))
         test = torch.utils.data.Subset(data, range(2001, 2501))
+    elif run_type == 'tiny':
+        train = torch.utils.data.Subset(data, range(32 * 3))
+        test = torch.utils.data.Subset(data, range(32 * 3 + 1, 32 * 3 + 1 + 32 * 2))
     else:
         raise ConfigException('pick a run type')
 
@@ -87,6 +90,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--device', type=str, default=device)
     parser.add_argument('--display', action='store_true')
+    parser.add_argument('--optimizer', type=str, default='SGD')
 
     """ model parameters """
     parser.add_argument('--model_name', type=str, default='vgg_kp_11')
@@ -120,12 +124,16 @@ if __name__ == '__main__':
         load_model(args.model_name, args.reload)
 
     """ optimizer """
-    # optim = Adam(kp_network.parameters(), lr=1e-4)
-    optim = SGD(kp_network.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+    if args.optimizer == 'Adam':
+        optim = Adam(kp_network.parameters(), lr=1e-4)
+    elif args.optimizer == 'SGD':
+        optim = SGD(kp_network.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+
     scheduler = ReduceLROnPlateau(optim, mode='min')
 
     """ apex """
-    model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
+    if args.device != 'cpu':
+        model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
 
     """ loss function """
     criterion = nn.MSELoss()
@@ -147,8 +155,11 @@ if __name__ == '__main__':
             #loss, loss_image, loss_mask = criterion(x_t, x_)
 
             if args.train_mode:
-                with amp.scale_loss(loss, optim) as scaled_loss:
-                    scaled_loss.backward()
+                if args.device != 'cpu':
+                    with amp.scale_loss(loss, optim) as scaled_loss:
+                        scaled_loss.backward()
+                else:
+                    loss.backward()
                 optim.step()
 
             display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, type='Train')
