@@ -49,11 +49,13 @@ class ResultsLogger(object):
         else:
             self.tb = None
 
-    def header(self, run_id, comment, model_name, run_type, batch_size, lr, opt_level, dataset, num_keypoints):
-        mesg = f'STARTING RUN: {run_id}, comment: {comment}, model_name: {model_name}, run_type: {run_type}, ' \
-               f'batch_size: {batch_size}, lr {lr},' \
-               f'opt_level: {opt_level}, dataset: {dataset}, keypoints: {num_keypoints} {comment}'
+    def header(self, args):
+
+        mesg = ''
+        for name, value in args.__dict__.items():
+            mesg += f'{name}: {value} '
         self.logging.debug(mesg)
+        print(mesg)
         if self.tb:
             self.tb.add_text(mesg, 'Config', global_step=0)
 
@@ -77,7 +79,7 @@ class ResultsLogger(object):
         tqdm.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} {type} Loss: {stats.mean(self.ll)}')
 
         if self.tb:
-            self.tb.add_scalar(f'{type} loss', loss.item(), global_step=self.step)
+            self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if not batch_i % 8:
             panel = self.build_panel(x, x_, x_t, k)
@@ -85,7 +87,7 @@ class ResultsLogger(object):
             if self.visuals:
                 self.display(panel)
             if self.tb:
-                self.tb.add_image(f'{type} panel', panel, global_step=self.step)
+                self.tb.add_image(f'{type}_panel', panel, global_step=self.step)
 
         self.step += 1
 

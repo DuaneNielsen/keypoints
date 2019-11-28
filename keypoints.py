@@ -100,11 +100,16 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--lr', type=float, default=0.01)
 
+    """ data augmentation parameters """
+    parser.add_argument('--tps_cntl_pts', type=int, default=4)
+    parser.add_argument('--tps_variance', type=float, default=0.11)
+    parser.add_argument('--max_rotate', type=float, default=0.2)
+
     args = parser.parse_args()
 
     """ variables """
     display = ResultsLogger(model_name=args.model_name, run_id=args.run_id, title='Results', visuals=args.display, comment=args.comment)
-    display.header(args.run_id, args.comment, args.model_name, args.run_type, args.batch_size, args.lr, args.opt_level, args.dataset, args.num_keypoints)
+    display.header(args)
 
     """ dataset """
     train, test = get_dataset(args.dataset, args.run_type)
@@ -113,8 +118,8 @@ if __name__ == '__main__':
 
     """ data augmentation"""
     peturb = transforms.Compose([
-        RandRotate(),
-        RandomTPSTransform()
+        RandRotate(max=args.max_rotate),
+        RandomTPSTransform(variance=args.tps_variance)
     ])
 
     """ model """
