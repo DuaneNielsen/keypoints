@@ -3,36 +3,14 @@ import torch.nn as nn
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from pathlib import Path
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from models import factory
+from models import vgg
 from utils import ResultsLogger
 from tps import RandomTPSTransform, RandRotate
 from apex import amp
 from datasets import get_dataset
 import argparse
-
-
-def load_model(model_name, load_run_id):
-    encoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/encoder.mdl')
-    decoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/decoder.mdl')
-    keypoint_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/keypoint.mdl')
-    kp_network.encoder.load_state_dict((torch.load(str(encoder_block_load_path))))
-    kp_network.decoder.load_state_dict(torch.load(str(decoder_block_load_path)))
-    kp_network.keypoint.load_state_dict(torch.load(str(keypoint_block_load_path)))
-
-
-def save_model(model_name, run_id):
-    encoder_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/encoder.mdl')
-    decoder_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/decoder.mdl')
-    keypoint_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/keypoint.mdl')
-    encoder_block_save_path.parent.mkdir(parents=True, exist_ok=True)
-    decoder_block_save_path.parent.mkdir(parents=True, exist_ok=True)
-    keypoint_block_save_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(kp_network.encoder.state_dict(), str(encoder_block_save_path))
-    torch.save(kp_network.decoder.state_dict(), str(decoder_block_save_path))
-    torch.save(kp_network.keypoint.state_dict(), str(keypoint_block_save_path))
 
 
 if __name__ == '__main__':
@@ -78,17 +56,17 @@ if __name__ == '__main__':
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
-    """ data augmentation"""
+    """ data augmentation """
     peturb = transforms.Compose([
         RandRotate(max=args.max_rotate),
         RandomTPSTransform(variance=args.tps_variance)
     ])
 
     """ model """
-    kp_network = factory.vgg11_bn_keypoint(sigma=0.1, num_keypoints=args.num_keypoints, init_weights=True).to(args.device)
+    kp_network = vgg.vgg11_bn_keypoint(sigma=0.1, num_keypoints=args.num_keypoints, init_weights=True).to(args.device)
 
     if args.reload != 0:
-        load_model(args.model_name, args.reload)
+        kp_network.load_model(args.model_name, args.reload)
 
     """ optimizer """
     if args.optimizer == 'Adam':
@@ -98,7 +76,7 @@ if __name__ == '__main__':
 
     scheduler = ReduceLROnPlateau(optim, mode='min')
 
-    """ apex """
+    """ apex mixed precision """
     if args.device != 'cpu':
         model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
 
@@ -150,4 +128,4 @@ if __name__ == '__main__':
 
             """ save if model improved """
             if ave_loss <= best_loss and args.train_mode:
-                save_model(args.model_name, args.run_id)
+                kp_network.save_model(args.model_name, args.run_id)

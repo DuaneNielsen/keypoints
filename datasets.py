@@ -16,6 +16,8 @@ class ConfigException(Exception):
     pass
 
 
+""" dataset which generates a white square in the middle of color image """
+
 def square(offset, height):
     top_left = Pos(offset.x, offset.y)
     top_right = Pos(offset.x + height.x, offset.y)
@@ -58,6 +60,8 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
     def __len__(self):
         return self.size
 
+
+""" Atari dataset generator """
 
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)

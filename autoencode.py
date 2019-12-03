@@ -9,7 +9,7 @@ from torch.optim import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
-from models import factory
+from models import vgg
 from utils import get_lr, UniImageViewer
 
 
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     """ model """
-    auto_encoder = factory.vgg11_bn_auto().to(device)
+    auto_encoder = vgg.vgg11_bn_auto().to(device)
 
     if reload:
         encoder_block_load_path = Path(f'data/keypoints_auto/{model_name}/run{str(load_run_id)}/encoder.mdl')

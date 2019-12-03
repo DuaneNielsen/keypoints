@@ -1,6 +1,6 @@
 import torch
 from torch import nn as nn
-
+from pathlib import Path
 from knn import SpatialSoftmax
 
 
@@ -20,7 +20,7 @@ class Keypoint(nn.Module):
         return k
 
 
-class VGGKeypoints(nn.Module):
+class KeyNet(nn.Module):
     def __init__(self, encoder, decoder, keypoint, keymapper, init_weights=True):
         super().__init__()
         self.encoder = encoder
@@ -49,3 +49,20 @@ class VGGKeypoints(nn.Module):
         gm = self.keymapper(k, height=z.size(2), width=z.size(3))
         x_t = self.decoder(torch.cat((z, gm), dim=1))
         return x_t, z, k
+
+    def load_model(self, model_name, load_run_id):
+        encoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/encoder.mdl')
+        decoder_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/decoder.mdl')
+        keypoint_block_load_path = Path(f'data/keypoint_net/{model_name}/run{str(load_run_id)}/keypoint.mdl')
+        self.encoder.load_state_dict((torch.load(str(encoder_block_load_path))))
+        self.decoder.load_state_dict(torch.load(str(decoder_block_load_path)))
+        self.keypoint.load_state_dict(torch.load(str(keypoint_block_load_path)))
+
+    def save_model(self, model_name, run_id):
+        encoder_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/encoder.mdl')
+        decoder_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/decoder.mdl')
+        keypoint_block_save_path = Path(f'data/keypoint_net/{model_name}/run{str(run_id)}/keypoint.mdl')
+        encoder_block_save_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(self.encoder.state_dict(), str(encoder_block_save_path))
+        torch.save(self.decoder.state_dict(), str(decoder_block_save_path))
+        torch.save(self.keypoint.state_dict(), str(keypoint_block_save_path))

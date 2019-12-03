@@ -3,7 +3,6 @@ import torchvision as tv
 from torchvision import transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from pathlib import Path
 from colorama import Fore, Style
 from torch.optim import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -11,7 +10,7 @@ import torch.nn as nn
 import statistics as stats
 
 import models.classifier
-from models import factory
+from models import vgg
 from utils import precision, get_lr
 
 if __name__ == '__main__':
@@ -24,7 +23,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     run_id = 2
     epochs = 200
-    torchvision_data_root = '~/tv-data'
+    torchvision_data_root = 'data'
 
     best_precision = 0.0
 
@@ -38,22 +37,19 @@ if __name__ == '__main__':
     train = tv.datasets.CIFAR10(torchvision_data_root, train=True, download=True, transform=transform)
     test = tv.datasets.CIFAR10(torchvision_data_root, train=False, download=True, transform=transform)
 
-
     train_l = DataLoader(train, batch_size=batch_size, shuffle=True, drop_last=True)
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True)
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-    #classifier = vgg11_bn(num_classes=10, pretrained=False).to('cuda')
-    classifier = factory.vgg11_bn(models.classifier.VGGClassifier(num_classes), pretrained=False).to('cuda')
+    feature_block = models.classifier.FeatureBlock(3)
+    output_block = models.classifier.OutputBlock(num_classes)
+    classifier = models.vgg.vgg11_bn(feature_block, output_block, pretrained=False).to('cuda')
 
     reload = False
     load_run_id = 2
 
     if reload:
-        feature_block_load_path = Path('data/keypoints_vgg/models/run' + str(load_run_id) + '/feature.mdl')
-        output_block_load_path = Path('data/keypoints_vgg/models/run' + str(load_run_id) + '/output.mdl')
-        classifier.feature_block.load_state_dict((torch.load(str(feature_block_load_path))))
-        classifier.output_block.load_state_dict(torch.load(str(output_block_load_path)))
+        classifier.load(load_run_id)
 
     #optim = Adam(classifier.parameters(), lr=1e-3, weight_decay=5e-4)
     optim = SGD(classifier.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
@@ -106,9 +102,4 @@ if __name__ == '__main__':
         scheduler.step(ave_precis)
 
         if ave_precis >= best_precision:
-            feature_block_save_path = Path('data/keypoints_vgg/models/run' + str(run_id) + '/feature.mdl')
-            output_block_save_path = Path('data/keypoints_vgg/models/run' + str(run_id) + '/output.mdl')
-            feature_block_save_path.parent.mkdir(parents=True, exist_ok=True)
-            output_block_save_path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(classifier.feature_block.state_dict(), str(feature_block_save_path))
-            torch.save(classifier.output_block.state_dict(), str(output_block_save_path))
+            classifier.save(run_id=run_id)

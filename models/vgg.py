@@ -2,11 +2,12 @@ import torch.nn as nn
 from torchvision.models.utils import load_state_dict_from_url
 
 from models.autoencoder import VGGAutoEncoder
-from knn import Container, GaussianLike, ActivationMap, Identity
-from models.keypoints import Keypoint, VGGKeypoints
+from models.classifier import Classifier
+from knn import GaussianLike, ActivationMap, Identity
+from models.keynet import Keypoint, KeyNet
 
 __all__ = [
-    'VGG', 'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
+    'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
     'vgg19_bn', 'vgg19',
 ]
 
@@ -21,25 +22,6 @@ model_urls = {
     'vgg16_bn': 'https://download.pytorch.org/models/vgg16_bn-6c64b313.pth',
     'vgg19_bn': 'https://download.pytorch.org/models/vgg19_bn-c79401a0.pth',
 }
-
-
-class VGGBlock(nn.Module):
-
-    def __init__(self, features):
-        super().__init__()
-        self.features = features
-
-    def forward(self, x):
-        x = self.features(x)
-        return x
-
-
-class VGG(Container):
-    def __init__(self, feature_block, output_block, init_weights=True):
-        super().__init__()
-
-        if init_weights:
-            self._initialize_weights()
 
 
 def make_layers(cfg, batch_norm=False):
@@ -60,10 +42,6 @@ def make_layers(cfg, batch_norm=False):
                 layers += [conv2d, nn.ReLU(inplace=True)]
             in_channels = v
     return nn.Sequential(*layers)
-
-
-
-
 
 """
 M -> MaxPooling
@@ -87,14 +65,10 @@ cfgs = {
 }
 
 
-def _vgg(arch, cfg, output_block, batch_norm, pretrained, progress, **kwargs):
+def _vgg(arch, cfg, feature_block, output_block, batch_norm, pretrained, progress, **kwargs):
     if pretrained:
         kwargs['init_weights'] = False
-    model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), output_block, **kwargs)
-    if pretrained:
-        state_dict = load_state_dict_from_url(model_urls[arch],
-                                              progress=progress)
-        model.load_state_dict(state_dict)
+    model = Classifier(feature_block, make_layers(cfgs[cfg], batch_norm=batch_norm), output_block)
     return model
 
 
@@ -118,7 +92,7 @@ def _vgg_kp(cfg, pretrained, **kwargs):
     keypoints = Keypoint(kp_encoder, num_keypoints=kwargs['num_keypoints'])
     keymapper = GaussianLike(sigma=kwargs["sigma"])
     #keymapper = CopyPoints(height=kwargs["height"], width=kwargs["width"], sigma=kwargs["sigma"])
-    return VGGKeypoints(encoder, decoder, keypoints, keymapper, init_weights=True)
+    return KeyNet(encoder, decoder, keypoints, keymapper, init_weights=True)
 
 
 def _vgg_kp_test(cfg, pretrained, **kwargs):
@@ -130,7 +104,7 @@ def _vgg_kp_test(cfg, pretrained, **kwargs):
     decoder = make_layers(auto_cfgs[cfg]["decoder"], batch_norm=True)
     keypoints = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
     keymapper = Identity()
-    return VGGKeypoints(encoder, decoder, keypoints, keymapper)
+    return KeyNet(encoder, decoder, keypoints, keymapper)
 
 
 def vgg11(output_block, pretrained=False, progress=True, **kwargs):
@@ -156,7 +130,7 @@ def vgg11_bn_keypoint_test(height, width, num_keypoints=10):
     return _vgg_kp_test('A', pretrained=False, height=height, width=width, num_keypoints=num_keypoints)
 
 
-def vgg11_bn(output_block, pretrained=False, progress=True, **kwargs):
+def vgg11_bn(feature_block, output_block, pretrained=False, progress=True, **kwargs):
     r"""VGG 11-layer model (configuration "A") with batch normalization
     `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
 
@@ -164,7 +138,7 @@ def vgg11_bn(output_block, pretrained=False, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _vgg('vgg11_bn', 'A', output_block, True, pretrained, progress, **kwargs)
+    return _vgg('vgg11_bn', 'A', feature_block, output_block, True, pretrained, progress, **kwargs)
 
 
 
