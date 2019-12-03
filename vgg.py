@@ -1,16 +1,17 @@
 import torch
 import torchvision as tv
 from torchvision import transforms
-from torchvision.models import vgg19_bn, vgg11_bn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
 from colorama import Fore, Style
 from torch.optim import SGD
-from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
-import models
+
+import models.classifier
+from models import factory
 from utils import precision, get_lr
 
 if __name__ == '__main__':
@@ -43,7 +44,7 @@ if __name__ == '__main__':
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     #classifier = vgg11_bn(num_classes=10, pretrained=False).to('cuda')
-    classifier = models.vgg11_bn(models.VGGClassifier(num_classes), pretrained=False).to('cuda')
+    classifier = factory.vgg11_bn(models.classifier.VGGClassifier(num_classes), pretrained=False).to('cuda')
 
     reload = False
     load_run_id = 2

@@ -5,11 +5,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
 from colorama import Fore, Style
-from torch.optim import SGD, Adam
-from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
+from torch.optim import SGD
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
-import models
+from models import factory
 from utils import get_lr, UniImageViewer
 
 
@@ -18,12 +18,12 @@ view_in = UniImageViewer('in', screen_resolution=(448, 192))
 if __name__ == '__main__':
 
     """ config """
-    train_mode = False
-    reload = True
+    train_mode = True
+    reload = False
     load_run_id = 2
     run_id = 3
     epochs = 800
-    torchvision_data_root = '~/tv-data'
+    torchvision_data_root = 'data'
     model_name = 'vgg_kp_11'
 
     """ hyper-parameters"""
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
     """ model """
-    auto_encoder = models.vgg11_bn_auto().to(device)
+    auto_encoder = factory.vgg11_bn_auto().to(device)
 
     if reload:
         encoder_block_load_path = Path(f'data/keypoints_auto/{model_name}/run{str(load_run_id)}/encoder.mdl')
@@ -116,3 +116,5 @@ if __name__ == '__main__':
             decoder_block_save_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save(auto_encoder.encoder.state_dict(), str(encoder_block_save_path))
             torch.save(auto_encoder.decoder.state_dict(), str(decoder_block_save_path))
+
+

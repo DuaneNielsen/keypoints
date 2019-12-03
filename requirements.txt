@@ -6,3 +6,4 @@ opencv-python
 numpy
 pytest
 matplotlib
+gym[atari]

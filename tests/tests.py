@@ -1,14 +1,9 @@
-import models
+import functional
+import knn
+import losses
 import torch
 import torch.nn.functional as F
-import colorama
-import cv2
-from utils import UniImageViewer
-from pathlib import Path
-from os import getcwd
-from torchvision.transforms import ToTensor
 from tps import tps_grid, tps_random
-from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
@@ -29,7 +24,7 @@ def test_plot():
 
 
 def test_perceptual_loss():
-    criterion = models.PerceptualLoss()
+    criterion = losses.PerceptualLoss()
     x = torch.rand(1, 3, 256, 256)
     target = torch.rand(1, 3, 256, 256)
     loss = criterion(x, target)
@@ -49,7 +44,7 @@ def test_spacial_softmax():
         [0, 0, 0, 0, 0],
     ]).expand(1, 1, 5, 5).float()
 
-    ss = models.SpatialSoftmax()
+    ss = knn.SpatialSoftmax()
 
     k = ss(heatmap)
 
@@ -65,11 +60,11 @@ def test_gaussian_like():
         [0, 0, 0, 0, 0],
     ]).expand(1, 1, 5, 5).float()
 
-    ss = models.SpatialSoftmax()
+    ss = knn.SpatialSoftmax()
 
     k = ss(heatmap)
 
-    hm = models.gaussian_like_function(k, 5, 5)
+    hm = functional.gaussian_like_function(k, 5, 5)
 
     print('')
     print(hm)
@@ -94,11 +89,11 @@ def test_gaussian_like_batch():
 
     ]).expand(2, 2, 5, 5).float()
 
-    ss = models.SpatialSoftmax()
+    ss = knn.SpatialSoftmax()
 
     k = ss(heatmap)
 
-    hm = models.gaussian_like_function(k, 5, 5)
+    hm = functional.gaussian_like_function(k, 5, 5)
 
     print('')
     print(hm)
@@ -106,7 +101,7 @@ def test_gaussian_like_batch():
 def test_spacial_softmax_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
     h = heatmap.neg()
-    ss = models.SpatialSoftmax()
+    ss = knn.SpatialSoftmax()
     k = ss(h)
     loss = torch.sum(torch.cat(k, dim=1))
     loss.backward()
@@ -117,7 +112,7 @@ def test_spacial_softmax_grads():
 def test_gaussian_function_grads():
     x, y = torch.rand(1, 5, requires_grad=True), torch.rand(1, 5, requires_grad=True)
     kp = x.neg(), y.neg()
-    ss = models.gaussian_like_function(kp, 5, 5)
+    ss = functional.gaussian_like_function(kp, 5, 5)
     loss = torch.sum(ss)
     loss.backward()
     print(ss)
@@ -128,7 +123,7 @@ def test_plot_gaussian_function():
     mu = 0.5
     sigma = 0.4
     kp = torch.randn(1, 1, requires_grad=True) * sigma + mu, torch.randn(1, 1, requires_grad=True) * sigma + mu
-    z = models.gaussian_like_function(kp, 14, 14, sigma=0.2).squeeze().detach().numpy()
+    z = functional.gaussian_like_function(kp, 14, 14, sigma=0.2).squeeze().detach().numpy()
     coordinates = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
 
     # show height map in 3d
@@ -151,7 +146,7 @@ def test_plot_keypoints():
     height, width = bm.size(2), bm.size(3)
     heatmap = torch.rand(1, 10, height, width, requires_grad=False)
     h = heatmap.neg()
-    ss = models.SpatialSoftmax()
+    ss = knn.SpatialSoftmax()
     x, y = ss(h)
     x, y = x.squeeze().detach().numpy(), y.squeeze().detach().numpy()
 
@@ -168,9 +163,9 @@ def test_plot_keypoints():
 def test_bottlneck_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
     h = heatmap.neg()
-    ss = models.SpatialSoftmax(5, 5)
+    ss = knn.SpatialSoftmax(5, 5)
     kp = ss(h)
-    ss = models.gaussian_like_function(kp, 5, 5)
+    ss = functional.gaussian_like_function(kp, 5, 5)
     loss = torch.sum(ss)
     loss.backward()
     print(heatmap.grad)
@@ -197,7 +192,7 @@ def test_plt_keypoints():
     bm = bad_monkey(num_monkeys)
     height, width = bm.size(2), bm.size(3)
     heatmap = torch.rand(num_monkeys, 10, height, width, requires_grad=False)
-    ss = models.SpatialSoftmax(height, width)
+    ss = knn.SpatialSoftmax(height, width)
     k = ss(heatmap)
     image = plot_keypoints_on_image(k, bm, batch_index=torch.arange(num_monkeys))
     image = tvt.ToTensor()(tvt.Resize((256, 256))(image))

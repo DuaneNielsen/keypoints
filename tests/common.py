@@ -1,7 +1,8 @@
 from pathlib import Path
 import cv2
 from torchvision.transforms import ToTensor
-import models
+
+import knn
 import torch
 
 """ DATA  """
@@ -21,6 +22,6 @@ def keypoints(num=10):
     height, width = bm.size(2), bm.size(3)
     heatmap = torch.rand(1, num, height, width, requires_grad=False)
     h = heatmap.neg()
-    ss = models.SpatialSoftmax()
+    ss = knn.SpatialSoftmax()
     x, y = ss(h)
     return x, y
