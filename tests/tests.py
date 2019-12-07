@@ -9,6 +9,8 @@ import numpy as np
 from utils import plot_keypoints_on_image, UniImageViewer
 import torchvision.transforms as tvt
 from tests.common import bad_monkey
+from mpl_toolkits.mplot3d import Axes3D
+
 
 def test_plot():
     z = np.array([[x**2 + y**2 for x in range(20)] for y in range(20)])
