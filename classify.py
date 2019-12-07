@@ -10,6 +10,7 @@ import torch.nn as nn
 import statistics as stats
 
 import models.classifier
+import models.knn
 from models import vgg
 from utils import precision, get_lr
 
@@ -41,9 +42,10 @@ if __name__ == '__main__':
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True)
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-    feature_block = models.classifier.FeatureBlock(3)
+    feature_block = models.knn.FeatureBlock(3)
     output_block = models.classifier.OutputBlock(num_classes)
-    classifier = models.vgg.vgg11_bn(feature_block, output_block, pretrained=False).to('cuda')
+    core_block = models.vgg.make_layers(models.vgg.vgg_cfg['A'])
+    classifier = models.classifier.Classifier('vgg11_classifier', feature_block, core_block, output_block).to('cuda')
 
     reload = False
     load_run_id = 2

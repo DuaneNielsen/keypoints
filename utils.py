@@ -4,9 +4,12 @@ import numpy as np
 from PIL import Image
 import statistics as stats
 import torchvision.transforms as transforms
+import torchvision.transforms.functional as F
+
 from colorama import Fore, Style
 import logging
 from torch.utils.tensorboard import SummaryWriter
+
 
 colormap = ["FF355E",
             "8ffe09",
@@ -29,6 +32,12 @@ def color_map():
     cm = np.frombuffer(b, np.uint8)
     cm = cm.reshape(len(colormap), 3)
     return cm
+
+
+def resize2D(tensor, size, interpolation=Image.BILINEAR):
+    pic = F.to_pil_image(tensor.cpu())
+    pic = F.resize(pic, size, interpolation)
+    return F.to_tensor(pic).to(tensor.device)
 
 
 class ResultsLogger(object):
@@ -59,20 +68,23 @@ class ResultsLogger(object):
         if self.tb:
             self.tb.add_text(mesg, 'Config', global_step=0)
 
+
     def build_panel(self, x, x_, x_t, k, *images):
         key_x, key_y = k
+        height, width = x.size(2), x.size(3)
         kp_image = plot_keypoints_on_image((key_x.float(), key_y.float()), x_.float())
         kp_image_t = transforms.ToTensor()(kp_image).to(x.device)
         panel = [x[0].float(), x_[0].float(), x_t[0].float(), kp_image_t]
         for i in images:
-            panel.append(i[0].float())
+            resized = resize2D(i[0], (height, width))
+            panel.append(resized.float())
         panel = torch.cat(panel, dim=2)
         return panel
 
     def display(self, panel, blocking=False):
         self.viewer.render(panel, blocking)
 
-    def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, k, type, depth=None):
+    def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, k, m, type, depth=None):
         self.ll.append(loss.item())
         if depth is not None and len(self.ll) > depth:
             self.ll.pop(0)
@@ -82,7 +94,7 @@ class ResultsLogger(object):
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if not batch_i % 8:
-            panel = self.build_panel(x, x_, x_t, k)
+            panel = self.build_panel(x, x_, x_t, k, m)
             # display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
             if self.visuals:
                 self.display(panel)

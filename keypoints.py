@@ -5,12 +5,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from models import vgg
+from models import vgg, keynet
 from utils import ResultsLogger
 from tps import RandomTPSTransform, RandRotate
 from apex import amp
 from datasets import get_dataset
 import argparse
+import models.knn as knn
 
 
 if __name__ == '__main__':
@@ -34,7 +35,7 @@ if __name__ == '__main__':
 
     """ model parameters """
     parser.add_argument('--model_name', type=str, default='vgg_kp_11')
-    parser.add_argument('--num_keypoints', type=int, default=4)
+    parser.add_argument('--num_keypoints', type=int, default=10)
 
     """ hyper-parameters """
     parser.add_argument('--batch_size', type=int, default=32)
@@ -63,10 +64,17 @@ if __name__ == '__main__':
     ])
 
     """ model """
-    kp_network = vgg.vgg11_bn_keypoint(sigma=0.1, num_keypoints=args.num_keypoints, init_weights=True).to(args.device)
+    encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
+    encoder = knn.Unit('encoder', 3, 64, encoder_core)
+    decoder_core = vgg.make_layers(vgg.decoder_cfg['F'])
+    decoder = knn.Unit('decoder', 64 + args.num_keypoints, 3, decoder_core)
+    keypoint_core = vgg.make_layers(vgg.vgg_cfg['F'])
+    keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core)
+    keymapper = knn.GaussianLike(sigma=0.1)
+    kp_network = keynet.KeyNet('vgg_keynet', encoder, keypoint, keymapper, decoder).to(device)
 
     if args.reload != 0:
-        kp_network.load_model(args.model_name, args.reload)
+        kp_network.load(args.reload)
 
     """ optimizer """
     if args.optimizer == 'Adam':
@@ -95,7 +103,7 @@ if __name__ == '__main__':
             x_ = peturb(x)
 
             optim.zero_grad()
-            x_t, z, k = kp_network(x, x_)
+            x_t, z, k, m = kp_network(x, x_)
             loss = criterion(x_t, x_)
             #loss, loss_image, loss_mask = criterion(x_t, x_)
 
@@ -107,7 +115,7 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
-            display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, type='Train')
+            display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, m, type='Train')
 
         """ test  """
         with torch.no_grad():
@@ -118,14 +126,14 @@ if __name__ == '__main__':
                 x = peturb(x)
                 x_ = peturb(x)
 
-                x_t, z, k = kp_network(x, x_)
+                x_t, z, k, m = kp_network(x, x_)
                 loss = criterion(x_t, x_)
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, type='Test')
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, m, type='Test')
 
             ave_loss, best_loss = display.end_epoch(epoch, optim)
             scheduler.step(ave_loss)
 
             """ save if model improved """
             if ave_loss <= best_loss and args.train_mode:
-                kp_network.save_model(args.model_name, args.run_id)
+                kp_network.save(args.run_id)

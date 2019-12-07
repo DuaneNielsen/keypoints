@@ -110,19 +110,29 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
         return self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1]
 
 
+D_CELEBA = 'celeba'
+D_SQUARE = 'square'
+D_PONG = 'pong'
+
+SIZE_FULL = 'full'
+SIZE_SMALL = 'small'
+SIZE_SHORT = 'short'
+SIZE_TINY = 'tiny'
+
+
 def get_dataset(data_root, dataset, run_type):
     size = {'full': 200000, 'small': 11001, 'short': 2501, 'tiny': 32 * 3 + 1 + 32 * 2}
-    if dataset is '/celeba-low':
-        path = Path(data_root + dataset)
+    if dataset == 'celeba':
+        path = Path(data_root + '/celeba-low')
         """ celeba a transforms """
         transform = transforms.Compose([
             transforms.Resize((128, 128)),
             transforms.ToTensor(),
         ])
         data = tv.datasets.ImageFolder(str(path), transform=transform)
-    elif dataset is 'square':
+    elif dataset == 'square':
         data = SquareDataset(size=200000, transform=transforms.ToTensor())
-    elif dataset is 'pong':
+    elif dataset == 'pong':
         data = AtariDataset('Pong-v0', size[run_type], pong_prepro)
     else:
         raise ConfigException('pick a dataset')

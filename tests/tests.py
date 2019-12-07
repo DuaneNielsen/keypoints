@@ -1,6 +1,5 @@
-import functional
-import knn
-import losses
+import models.functional as MF
+from models import knn, losses
 import torch
 import torch.nn.functional as F
 from tps import tps_grid, tps_random
@@ -64,7 +63,7 @@ def test_gaussian_like():
 
     k = ss(heatmap)
 
-    hm = functional.gaussian_like_function(k, 5, 5)
+    hm = MF.gaussian_like_function(k, 5, 5)
 
     print('')
     print(hm)
@@ -93,7 +92,7 @@ def test_gaussian_like_batch():
 
     k = ss(heatmap)
 
-    hm = functional.gaussian_like_function(k, 5, 5)
+    hm = MF.gaussian_like_function(k, 5, 5)
 
     print('')
     print(hm)
@@ -112,7 +111,7 @@ def test_spacial_softmax_grads():
 def test_gaussian_function_grads():
     x, y = torch.rand(1, 5, requires_grad=True), torch.rand(1, 5, requires_grad=True)
     kp = x.neg(), y.neg()
-    ss = functional.gaussian_like_function(kp, 5, 5)
+    ss = MF.gaussian_like_function(kp, 5, 5)
     loss = torch.sum(ss)
     loss.backward()
     print(ss)
@@ -123,7 +122,7 @@ def test_plot_gaussian_function():
     mu = 0.5
     sigma = 0.4
     kp = torch.randn(1, 1, requires_grad=True) * sigma + mu, torch.randn(1, 1, requires_grad=True) * sigma + mu
-    z = functional.gaussian_like_function(kp, 14, 14, sigma=0.2).squeeze().detach().numpy()
+    z = MF.gaussian_like_function(kp, 14, 14, sigma=0.2).squeeze().detach().numpy()
     coordinates = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
 
     # show height map in 3d
@@ -165,7 +164,7 @@ def test_bottlneck_grads():
     h = heatmap.neg()
     ss = knn.SpatialSoftmax(5, 5)
     kp = ss(h)
-    ss = functional.gaussian_like_function(kp, 5, 5)
+    ss = MF.gaussian_like_function(kp, 5, 5)
     loss = torch.sum(ss)
     loss.backward()
     print(heatmap.grad)

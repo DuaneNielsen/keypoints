@@ -1,15 +1,5 @@
 import torch.nn as nn
-from torchvision.models.utils import load_state_dict_from_url
-
-from models.autoencoder import VGGAutoEncoder
-from models.classifier import Classifier
-from knn import GaussianLike, ActivationMap, Identity
-from models.keynet import Keypoint, KeyNet
-
-__all__ = [
-    'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
-    'vgg19_bn', 'vgg19',
-]
+from models.knn import ActivationMap
 
 
 model_urls = {
@@ -24,9 +14,9 @@ model_urls = {
 }
 
 
-def make_layers(cfg, batch_norm=False):
+def make_layers(cfg, batch_norm=True, extra_in_channels=0):
     layers = []
-    in_channels = cfg[0]
+    in_channels = cfg[0] + extra_in_channels
     for v in cfg[1:]:
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
@@ -46,170 +36,18 @@ def make_layers(cfg, batch_norm=False):
 """
 M -> MaxPooling
 L -> Capture Activations for Perceptual loss
+U -> Bilinear upsample
 """
 
-auto_cfgs = {
-    'A': {"encoder": [3, 64, 'M', 128, 'M', 256, 256, 'M', 512, 512],
-          "decoder": [512, 256, 'U', 256, 128, 'U', 128, 64, 'U', 64, 32, 32, 3]},
-    'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
-    'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
-    'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+decoder_cfg = {
+    'A': [512, 512, 'U', 256, 256, 'U', 256, 256, 'U', 128, 'U', 64, 'U'],
+    'F': [512, 512, 'U', 256, 256, 'U', 256, 256, 'U', 128, 64],
 }
 
-
-cfgs = {
+vgg_cfg = {
     'A': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'B': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
     'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
+    'F': [64, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512]
 }
-
-
-def _vgg(arch, cfg, feature_block, output_block, batch_norm, pretrained, progress, **kwargs):
-    if pretrained:
-        kwargs['init_weights'] = False
-    model = Classifier(feature_block, make_layers(cfgs[cfg], batch_norm=batch_norm), output_block)
-    return model
-
-
-def _vgg_auto(cfg, pretrained, **kwargs):
-    if pretrained:
-        kwargs['init_weights'] = False
-    encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
-    decoder = make_layers(auto_cfgs[cfg]["decoder"], batch_norm=True)
-    return VGGAutoEncoder(encoder, decoder)
-
-
-def _vgg_kp(cfg, pretrained, **kwargs):
-    if pretrained:
-        kwargs['init_weights'] = False
-    # need to add the number of keypoints to the channels of 1st layer
-    encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
-    decoder_cfg = auto_cfgs[cfg]["decoder"].copy()
-    decoder_cfg[0] += kwargs["num_keypoints"]
-    decoder = make_layers(decoder_cfg, batch_norm=True)
-    kp_encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
-    keypoints = Keypoint(kp_encoder, num_keypoints=kwargs['num_keypoints'])
-    keymapper = GaussianLike(sigma=kwargs["sigma"])
-    #keymapper = CopyPoints(height=kwargs["height"], width=kwargs["width"], sigma=kwargs["sigma"])
-    return KeyNet(encoder, decoder, keypoints, keymapper, init_weights=True)
-
-
-def _vgg_kp_test(cfg, pretrained, **kwargs):
-    if pretrained:
-        kwargs['init_weights'] = False
-    # need to add the number of keypoints to the channels of 1st layer
-    auto_cfgs[cfg]["decoder"][0] += kwargs["num_keypoints"]
-    encoder = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
-    decoder = make_layers(auto_cfgs[cfg]["decoder"], batch_norm=True)
-    keypoints = make_layers(auto_cfgs[cfg]["encoder"], batch_norm=True)
-    keymapper = Identity()
-    return KeyNet(encoder, decoder, keypoints, keymapper)
-
-
-def vgg11(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 11-layer model (configuration "A") from
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg11', 'A', output_block, False, pretrained, progress, **kwargs)
-
-
-def vgg11_bn_auto():
-    return _vgg_auto('A', pretrained=False)
-
-
-def vgg11_bn_keypoint(num_keypoints=10, sigma=1.0, **kwargs):
-    return _vgg_kp('A', pretrained=False, num_keypoints=num_keypoints, sigma=sigma, **kwargs)
-
-
-def vgg11_bn_keypoint_test(height, width, num_keypoints=10):
-    return _vgg_kp_test('A', pretrained=False, height=height, width=width, num_keypoints=num_keypoints)
-
-
-def vgg11_bn(feature_block, output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 11-layer model (configuration "A") with batch normalization
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg11_bn', 'A', feature_block, output_block, True, pretrained, progress, **kwargs)
-
-
-
-def vgg13(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 13-layer model (configuration "B")
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg13', 'B', output_block, False, pretrained, progress, **kwargs)
-
-
-
-def vgg13_bn(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 13-layer model (configuration "B") with batch normalization
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg13_bn', 'B', output_block, True, pretrained, progress, **kwargs)
-
-
-
-def vgg16(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 16-layer model (configuration "D")
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg16', 'D', output_block, False, pretrained, progress, **kwargs)
-
-def vgg16_bn_auto():
-    return _vgg_auto('D', pretrained=False)
-
-
-def vgg16_bn(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 16-layer model (configuration "D") with batch normalization
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg16_bn', 'D', output_block, True, pretrained, progress, **kwargs)
-
-
-
-def vgg19(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 19-layer model (configuration "E")
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg19', 'E', output_block, False, pretrained, progress, **kwargs)
-
-
-
-def vgg19_bn(output_block, pretrained=False, progress=True, **kwargs):
-    r"""VGG 19-layer model (configuration 'E') with batch normalization
-    `"Very Deep Convolutional Networks For Large-Scale Image Recognition" <https://arxiv.org/pdf/1409.1556.pdf>`_
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg('vgg19_bn', 'E', output_block, True, pretrained, progress, **kwargs)

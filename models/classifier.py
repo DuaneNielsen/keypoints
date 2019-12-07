@@ -1,18 +1,6 @@
 import torch
-from pathlib import Path
-from knn import Container
+from models.knn import Container
 import torch.nn as nn
-
-
-class FeatureBlock(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.block = nn.Conv2d(channels, 64, kernel_size=3, padding=1)
-        self.bn = nn.BatchNorm2d(64)
-        self.nl = nn.ReLU()
-
-    def forward(self, x):
-        return self.nl(self.bn(self.block(x)))
 
 
 class OutputBlock(nn.Module):
@@ -37,10 +25,10 @@ class OutputBlock(nn.Module):
 
 
 class Classifier(Container):
-    def __init__(self, feature_block, middle_block, output_block, init_weights=True):
-        super().__init__()
+    def __init__(self, name, feature_block, encoder, output_block, init_weights=True):
+        super().__init__(name)
         self.feature_block = feature_block
-        self.middle_block = middle_block
+        self.encoder = encoder
         self.output_block = output_block
 
         if init_weights:
@@ -48,24 +36,15 @@ class Classifier(Container):
 
     def forward(self, x):
         h = self.feature_block(x)
-        h = self.middle_block(h)
+        h = self.encoder(h)
         return self.output_block(h)
-
-    def _load_block(self, block, run_id, blockname):
-        path = Path(f'data/classifier/models/run_{run_id}/{blockname}.mdl')
-        block.load_state_dict(torch.load(str(path)))
-
-    def _save_block(self, block, run_id, blockname):
-        path = Path(f'data/classifier/models/run_{run_id}/{blockname}.mdl')
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(block.state_dict(), str(path))
 
     def load(self, run_id):
         self._load_block(self.feature_block, run_id, 'feature')
-        self._load_block(self.middle_block, run_id, 'middle')
+        self._load_block(self.encoder, run_id, 'encoder')
         self._load_block(self.output_block, run_id, 'output')
 
     def save(self, run_id):
         self._save_block(self.feature_block, run_id, 'feature')
-        self._save_block(self.middle_block, run_id, 'middle')
+        self._save_block(self.encoder, run_id, 'encoder')
         self._save_block(self.output_block, run_id, 'output')
