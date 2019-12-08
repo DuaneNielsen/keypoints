@@ -214,23 +214,24 @@ def plot_keypoints_on_image(k, image_tensor, radius=2, thickness=1, batch_index=
     height, width = image_tensor.size(2), image_tensor.size(3)
     image_tensor = torch.cat(torch.unbind(image_tensor[batch_index], 0), dim=2)
 
-    def to_npy(x):
-        return x.detach().squeeze().cpu().numpy()
+    num_keypoints = k.size(1)
+    k[:, :, 0] = k[:, :, 0] * height
+    k[:, :, 1] = k[:, :, 1] * width
+    k.floor_()
+    k = k[batch_index].detach().cpu().numpy()
 
-    x, y = k
-    x, y = to_npy(x[batch_index]), to_npy(y[batch_index])
-    x, y = np.floor(x * width), np.floor(y * height)
     img = transforms.ToPILImage()(image_tensor.cpu())
     img = np.array(img)
 
-    cm = color_map()[:len(x)].astype(int)
+    cm = color_map()[:num_keypoints].astype(int)
 
-    for x_, y_, color in zip(x, y, cm):
+    for co_ord, color in zip(k, cm):
         c = color.item(0), color.item(1), color.item(2)
-        cv2.circle(img, (x_, y_), radius, c, thickness)
+        co_ord = co_ord.squeeze()
+        cv2.circle(img, (co_ord[0], co_ord[1]), radius, c, thickness)
 
     # You may need to convert the color.
-    # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img_pil = Image.fromarray(img)
 
     return img_pil

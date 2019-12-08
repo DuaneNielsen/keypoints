@@ -3,7 +3,7 @@ from pathlib import Path
 import torch
 from torch import nn as nn
 from torch.nn import Parameter, functional as F
-from models.functional import gaussian_like_function
+from models.functional import gaussian_like_function, spacial_softmax
 
 
 class Container(nn.Module):
@@ -111,19 +111,8 @@ class SpatialSoftmax(torch.nn.Module):
         self.hs = Parameter(torch.zeros(1, 1, 14), requires_grad=False)
         self.ws = Parameter(torch.zeros(1, 1, 12), requires_grad=False)
 
-    def marginalSoftMax(self, heatmap, dim):
-        marginal = torch.sum(heatmap, dim=dim)
-        sm = F.softmax(marginal, dim=2)
-        return sm
-
     def forward(self, heatmap):
-        height, width = heatmap.size(2), heatmap.size(3)
-        h_sm, w_sm = self.marginalSoftMax(heatmap, dim=3), self.marginalSoftMax(heatmap, dim=2)
-        hs = torch.linspace(0, 1, height).type_as(heatmap).expand(1, 1, -1).to(heatmap.device)
-        ws = torch.linspace(0, 1, width).type_as(heatmap).expand(1, 1, -1).to(heatmap.device)
-        h_k, w_k = torch.sum(h_sm * hs, dim=2, keepdim=True).squeeze(2), \
-                   torch.sum(w_sm * ws, dim=2, keepdim=True).squeeze(2)
-        return h_k, w_k
+        return spacial_softmax(heatmap)
 
 
 class Unit(nn.Module):

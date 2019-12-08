@@ -2,6 +2,7 @@ import models.functional as MF
 from models import knn, losses
 import torch
 import torch.nn.functional as F
+import torchvision.transforms.functional as TVF
 from tps import tps_grid, tps_random
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -11,9 +12,36 @@ import torchvision.transforms as tvt
 from tests.common import bad_monkey
 from mpl_toolkits.mplot3d import Axes3D
 
+heatmap_batch = torch.tensor([
+    [
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 5, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+    ],
+    [
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 5],
+    ],
+]).expand(2, 2, 5, 5).float()
+
+
+def heatmap(value=1.0, batch=1, channels=1):
+    return torch.tensor([
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, value, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+    ]).expand(batch, channels, 5, 5).float()
+
 
 def test_plot():
-    z = np.array([[x**2 + y**2 for x in range(20)] for y in range(20)])
+    z = np.array([[x ** 2 + y ** 2 for x in range(20)] for y in range(20)])
     x, y = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
 
     # show height map in 3d
@@ -52,6 +80,20 @@ def test_spacial_softmax():
     print(k)
 
 
+def test_spacial_softmax():
+
+    batch = 5
+    channels = 10
+
+    ss = knn.SpatialSoftmax()
+    k = ss(heatmap(batch=batch, channels=channels))
+
+    print(k)
+    assert k.size(0) == batch
+    assert k.size(1) == channels
+    assert k.size(2) == 2
+
+
 def test_gaussian_like():
     heatmap = torch.tensor([
         [0, 0, 0, 0, 0],
@@ -72,32 +114,15 @@ def test_gaussian_like():
 
 
 def test_gaussian_like_batch():
-    heatmap = torch.tensor([
-        [
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 5, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-        ],
-        [
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 5],
-        ],
-
-    ]).expand(2, 2, 5, 5).float()
-
     ss = knn.SpatialSoftmax()
 
-    k = ss(heatmap)
+    k = ss(heatmap_batch)
 
     hm = MF.gaussian_like_function(k, 5, 5)
 
     print('')
     print(hm)
+
 
 def test_spacial_softmax_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
@@ -120,25 +145,49 @@ def test_gaussian_function_grads():
     print(x, y)
     print(x.grad, y.grad)
 
+
 def test_plot_gaussian_function():
     mu = 0.5
     sigma = 0.4
-    kp = torch.randn(1, 1, requires_grad=True) * sigma + mu, torch.randn(1, 1, requires_grad=True) * sigma + mu
-    z = MF.gaussian_like_function(kp, 14, 14, sigma=0.2).squeeze().detach().numpy()
-    coordinates = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
+    kp = torch.randn(1, 1, 2, requires_grad=True) * sigma + mu
+    z = MF.gaussian_like_function(kp, 14, 14, sigma=0.1).squeeze().detach().numpy()
 
-    # show height map in 3d
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(*coordinates, z)
-    plt.title('z as 3d height map')
-    plt.show()
+    plot_heightmap3d(z)
+    plot_heatmap2d(z)
 
+
+def test_align_kp_with_gaussian():
+    hm = heatmap()
+
+    # image = TVF.to_pil_image(heatmap[0])
+
+    ss = knn.SpatialSoftmax()
+
+    kp = ss(hm)
+
+    z = MF.gaussian_like_function(kp, 5, 5, sigma=0.1).squeeze().detach().numpy()
+
+    img = plot_keypoints_on_image(kp, hm)
+    plt.imshow(img)
+    plot_heatmap2d(z)
+
+
+def plot_heatmap2d(z):
     # show height map in 2d
     plt.figure()
     plt.title('z as 2d heat map')
     p = plt.imshow(z)
     plt.colorbar(p)
+    plt.show()
+
+
+def plot_heightmap3d(z):
+    # show height map in 3d
+    coordinates = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(*coordinates, z)
+    plt.title('z as 3d height map')
     plt.show()
 
 
@@ -245,8 +294,8 @@ def test_tps():
 
     u.render(out[0], block=True)
 
-def test_tps_random():
 
+def test_tps_random():
     images = []
     u = UniImageViewer(screen_resolution=(2400, 1200))
     x = bad_monkey()
@@ -256,7 +305,7 @@ def test_tps_random():
         set = []
 
         for _ in range(8):
-            set.append(tps_random(x, num_control_points=20, var=1/i))
+            set.append(tps_random(x, num_control_points=20, var=1 / i))
 
         st = torch.cat(set, dim=2)
         images.append(st)
