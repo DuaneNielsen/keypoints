@@ -105,11 +105,7 @@ class Identity(nn.Module):
 
 class SpatialSoftmax(torch.nn.Module):
     def __init__(self):
-        super(SpatialSoftmax, self).__init__()
-
-        # for backwards compatibility
-        self.hs = Parameter(torch.zeros(1, 1, 14), requires_grad=False)
-        self.ws = Parameter(torch.zeros(1, 1, 12), requires_grad=False)
+        super().__init__()
 
     def forward(self, heatmap):
         return spacial_softmax(heatmap)

@@ -210,15 +210,17 @@ class UniImageViewer:
         self.render(image)
 
 
-def plot_keypoints_on_image(k, image_tensor, radius=2, thickness=1, batch_index=torch.tensor([0], dtype=torch.long)):
-    height, width = image_tensor.size(2), image_tensor.size(3)
-    image_tensor = torch.cat(torch.unbind(image_tensor[batch_index], 0), dim=2)
+def plot_keypoints_on_image(k, image_tensor, radius=1, thickness=1):
+    height, width = image_tensor.size(1), image_tensor.size(2)
+    num_keypoints = k.size(0)
 
-    num_keypoints = k.size(1)
-    k[:, :, 0] = k[:, :, 0] * height
-    k[:, :, 1] = k[:, :, 1] * width
+    if len(k.shape) != 2:
+        raise Exception('Individual images and keypoints, not batches')
+
+    k[:, 0] = k[:, 0] * height
+    k[:, 1] = k[:, 1] * width
     k.floor_()
-    k = k[batch_index].detach().cpu().numpy()
+    k = k.detach().cpu().numpy()
 
     img = transforms.ToPILImage()(image_tensor.cpu())
     img = np.array(img)
@@ -230,7 +232,6 @@ def plot_keypoints_on_image(k, image_tensor, radius=2, thickness=1, batch_index=
         co_ord = co_ord.squeeze()
         cv2.circle(img, (co_ord[0], co_ord[1]), radius, c, thickness)
 
-    # You may need to convert the color.
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img_pil = Image.fromarray(img)
 

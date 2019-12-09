@@ -3,19 +3,24 @@ import torch.nn.functional as F
 
 
 def marginal_softmax(heatmap, dim):
-    marginal = torch.sum(heatmap, dim=dim)
+    marginal = torch.mean(heatmap, dim=dim)
     sm = F.softmax(marginal, dim=2)
     return sm
 
 
-def spacial_softmax(heatmap):
+def prob_to_keypoints(prob, length):
+    ruler = torch.linspace(0, 1, length).type_as(prob).expand(1, 1, -1).to(prob.device)
+    return torch.sum(prob * ruler, dim=2, keepdim=True).squeeze(2)
+
+
+def spacial_softmax(heatmap, probs=False):
     height, width = heatmap.size(2), heatmap.size(3)
-    h_sm, w_sm = marginal_softmax(heatmap, dim=3), marginal_softmax(heatmap, dim=2)
-    hs = torch.linspace(0, 1, height).type_as(heatmap).expand(1, 1, -1).to(heatmap.device)
-    ws = torch.linspace(0, 1, width).type_as(heatmap).expand(1, 1, -1).to(heatmap.device)
-    h_k, w_k = torch.sum(h_sm * hs, dim=2, keepdim=True).squeeze(2), \
-               torch.sum(w_sm * ws, dim=2, keepdim=True).squeeze(2)
-    return torch.stack((h_k, w_k), dim=2)
+    hp, wp = marginal_softmax(heatmap, dim=3), marginal_softmax(heatmap, dim=2)
+    hk, wk = prob_to_keypoints(hp, height), prob_to_keypoints(wp, width)
+    if probs:
+        return torch.stack((hk, wk), dim=2), (hp, wp)
+    else:
+        return torch.stack((hk, wk), dim=2)
 
 
 def squared_diff(h, height):

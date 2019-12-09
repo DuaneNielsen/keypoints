@@ -11,6 +11,8 @@ from utils import plot_keypoints_on_image, UniImageViewer
 import torchvision.transforms as tvt
 from tests.common import bad_monkey
 from mpl_toolkits.mplot3d import Axes3D
+from PIL import Image
+from matplotlib.gridspec import GridSpec
 
 heatmap_batch = torch.tensor([
     [
@@ -38,6 +40,8 @@ def heatmap(value=1.0, batch=1, channels=1):
         [0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0],
     ]).expand(batch, channels, 5, 5).float()
+
+
 
 
 def test_plot():
@@ -167,7 +171,7 @@ def test_align_kp_with_gaussian():
 
     z = MF.gaussian_like_function(kp, 5, 5, sigma=0.1).squeeze().detach().numpy()
 
-    img = plot_keypoints_on_image(kp, hm)
+    img = plot_keypoints_on_image(kp[0], hm[0])
     plt.imshow(img)
     plot_heatmap2d(z)
 
@@ -181,39 +185,87 @@ def plot_heatmap2d(z):
     plt.show()
 
 
-def plot_heightmap3d(z):
+def plot_heightmap3d(z, k=None):
     # show height map in 3d
     coordinates = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(*coordinates, z)
-    plt.title('z as 3d height map')
+
+    if k is not None:
+        plt.title(f'z as 3d height map {k[0]} {k[1]}')
+    else:
+        plt.title('z as 3d height map')
     plt.show()
 
 
-def test_plot_keypoints():
-    bm = bad_monkey()
-    height, width = bm.size(2), bm.size(3)
-    heatmap = torch.rand(1, 10, height, width, requires_grad=False)
-    h = heatmap.neg()
-    ss = knn.SpatialSoftmax()
-    x, y = ss(h)
-    x, y = x.squeeze().detach().numpy(), y.squeeze().detach().numpy()
-
-    # show height map in 2d
-    fig, ax = plt.subplots()
-    ax.axis('off')
-    ax.imshow(bm.squeeze().permute(1, 2, 0), zorder=1)
-    cluster = list(Line2D.filled_markers)[:x.shape[0]]
-    for xp, yp, m in zip(x, y, cluster):
-        ax.scatter(xp * height, yp * width, marker=m, zorder=2)
+def plot_single_channel(tensor):
+    plt.imshow(tensor.numpy(), cmap='gray', vmin=0, vmax=1)
     plt.show()
+
+def plot_marginal(tensor):
+    plt.hist(tensor.numpy())
+    plt.show()
+
+def plot_joint(image, x_marginal, y_marginal):
+
+    fig = plt.figure()
+
+    gs = GridSpec(4, 4)
+
+    ax_joint = fig.add_subplot(gs[1:4, 0:3])
+    ax_marg_top = fig.add_subplot(gs[0, 0:3])
+    ax_marg_side = fig.add_subplot(gs[1:4, 3])
+
+    ax_marg_side.set_autoscaley_on(False)
+    #ax_marg_side.set_ylim([0, 32])
+
+    ax_marg_top.set_autoscaley_on(False)
+    #ax_marg_top.set_ylim([0, 32])
+
+    ax_joint.imshow(image, cmap='gray', vmin=0, vmax=1)
+    ax_marg_top.hist(x_marginal)
+    ax_marg_side.hist(y_marginal, orientation="horizontal")
+
+    # Turn off tick labels on marginals
+    #plt.setp(ax_marg_y.get_xticklabels(), visible=False)
+    #plt.setp(ax_marg_x.get_yticklabels(), visible=False)
+
+
+    # Set labels on joint
+    ax_joint.set_xlabel('Joint x label')
+    ax_joint.set_ylabel('Joint y label')
+
+    # Set labels on marginals
+    ax_marg_side.set_xlabel('Marginal side')
+    ax_marg_top.set_ylabel('Marginal top')
+    plt.show()
+
+def test_marginals():
+    img = np.random.random((4, 4))
+    x_marginal = np.mean(img, axis=0)
+    y_marginal = np.mean(img, axis=1)
+    plot_joint(img, x_marginal, y_marginal)
+
+
+def test_co_ords():
+    hm = torch.zeros(1, 1, 32, 32)
+    hm[0, 0, 0, 31] = 1.0
+    k, p = MF.spacial_softmax(hm, probs=True)
+    g = MF.gaussian_like_function(k, 32, 32)
+    #plot_heightmap3d(hm[0, 0].detach().numpy())
+    #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
+    #plot_single_channel(hm[0, 0])
+    #plot_single_channel(g[0, 0])
+    #plot_joint(hm[0, 0], p[1][0], p[0][0])
+    plot_marginal(p[0][0])
+
 
 
 def test_bottlneck_grads():
     heatmap = torch.rand(1, 1, 5, 5, requires_grad=True)
     h = heatmap.neg()
-    ss = knn.SpatialSoftmax(5, 5)
+    ss = knn.SpatialSoftmax()
     kp = ss(h)
     ss = MF.gaussian_like_function(kp, 5, 5)
     loss = torch.sum(ss)
@@ -242,11 +294,11 @@ def test_plt_keypoints():
     bm = bad_monkey(num_monkeys)
     height, width = bm.size(2), bm.size(3)
     heatmap = torch.rand(num_monkeys, 10, height, width, requires_grad=False)
-    ss = knn.SpatialSoftmax(height, width)
+    ss = knn.SpatialSoftmax()
     k = ss(heatmap)
-    image = plot_keypoints_on_image(k, bm, batch_index=torch.arange(num_monkeys))
-    image = tvt.ToTensor()(tvt.Resize((256, 256))(image))
-    UniImageViewer().render(image, block=True)
+    image = plot_keypoints_on_image(k[0], bm[0], radius=3, thickness=3)
+    plt.imshow(image)
+    plt.show()
 
 
 """ THIN PLATE SPLINES"""
