@@ -249,10 +249,11 @@ def test_marginals():
 
 
 def test_co_ords():
-    hm = torch.zeros(1, 1, 32, 32)
-    hm[0, 0, 0, 31] = 1.0
+    height, width = 16, 16
+    hm = torch.zeros(1, 1, height, width)
+    hm[0, 0, 0, 15] = 1.0
     k, p = MF.spacial_softmax(hm, probs=True)
-    g = MF.gaussian_like_function(k, 32, 32)
+    g = MF.gaussian_like_function(k, height, width)
     #plot_heightmap3d(hm[0, 0].detach().numpy())
     #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
     #plot_single_channel(hm[0, 0])
