@@ -212,37 +212,38 @@ def plot_marginal(tensor):
     plt.show()
 
 
-def plot_joint(image, x_marginal, y_marginal):
+def plot_joint(image, x_marginal, y_marginal, k):
     w, h = matplotlib.figure.figaspect(1.0)
     fig = plt.figure(figsize=(w, h))
 
     gs = GridSpec(4, 4)
 
     ax_joint = fig.add_subplot(gs[1:4, 0:3])
+
     ax_marg_top = fig.add_subplot(gs[0, 0:3])
+    ax_marg_top_kp = fig.add_subplot(gs[0, 0:3])
+
     ax_marg_side = fig.add_subplot(gs[1:4, 3])
-
-    ax_joint.set_anchor('W')
-
-    #ax_marg_side.set_autoscaley_on(False)
-    #ax_marg_top.set_autoscaley_on(False)
+    ax_marg_side_kp = fig.add_subplot(gs[1:4, 3])
 
     ax_joint.imshow(image, cmap='gray', vmin=0, vmax=image.max(), origin='lower')
-    ax_marg_top.bar(np.arange(x_marginal.shape[0]), x_marginal)
-    ax_marg_side.barh(np.arange(y_marginal.shape[0]), y_marginal)
+
+    width = x_marginal.shape[0]
+    ax_marg_top.bar(np.arange(width), x_marginal)
+    xbins = np.zeros(width)
+    xbins[8] = x_marginal.max()
+    ax_marg_top_kp.bar(np.arange(width), xbins)
+
+    height = y_marginal.shape[0]
+    ax_marg_side.barh(np.arange(height), y_marginal)
+    ybins = np.zeros(height)
+    ybins[8] = y_marginal.max()
+    ax_marg_side_kp.barh(np.arange(height), ybins)
 
     # Turn off tick labels on marginals
     plt.setp(ax_marg_top.get_xticklabels(), visible=False)
     plt.setp(ax_marg_side.get_yticklabels(), visible=False)
 
-
-    # Set labels on joint
-    #ax_joint.set_xlabel('Joint x label')
-    #ax_joint.set_ylabel('Joint y label')
-
-    # Set labels on marginals
-    #ax_marg_side.set_xlabel('Marginal side')
-    #ax_marg_top.set_ylabel('Marginal top')
     plt.show()
 
 
@@ -263,7 +264,7 @@ def test_co_ords():
     #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
     #plot_single_channel(hm[0, 0])
     #plot_single_channel(g[0, 0])
-    plot_joint(hm[0, 0], p[1][0].numpy().squeeze(), p[0][0].numpy().squeeze())
+    plot_joint(hm[0, 0], p[1][0].numpy().squeeze(), p[0][0].numpy().squeeze(),  k[0, 0].numpy())
     #plot_marginal(p[0][0])
 
 
