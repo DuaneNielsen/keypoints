@@ -13,6 +13,7 @@ from tests.common import bad_monkey
 from mpl_toolkits.mplot3d import Axes3D
 from PIL import Image
 from matplotlib.gridspec import GridSpec
+import matplotlib.figure
 
 heatmap_batch = torch.tensor([
     [
@@ -203,13 +204,17 @@ def plot_single_channel(tensor):
     plt.imshow(tensor.numpy(), cmap='gray', vmin=0, vmax=1)
     plt.show()
 
+
 def plot_marginal(tensor):
-    plt.hist(tensor.numpy())
+    margin = tensor.numpy().squeeze()
+    bins = np.arange(margin.shape[0])
+    plt.barh(bins, margin)
     plt.show()
 
-def plot_joint(image, x_marginal, y_marginal):
 
-    fig = plt.figure()
+def plot_joint(image, x_marginal, y_marginal):
+    w, h = matplotlib.figure.figaspect(1.0)
+    fig = plt.figure(figsize=(w, h))
 
     gs = GridSpec(4, 4)
 
@@ -217,29 +222,29 @@ def plot_joint(image, x_marginal, y_marginal):
     ax_marg_top = fig.add_subplot(gs[0, 0:3])
     ax_marg_side = fig.add_subplot(gs[1:4, 3])
 
-    ax_marg_side.set_autoscaley_on(False)
-    #ax_marg_side.set_ylim([0, 32])
+    ax_joint.set_anchor('W')
 
-    ax_marg_top.set_autoscaley_on(False)
-    #ax_marg_top.set_ylim([0, 32])
+    #ax_marg_side.set_autoscaley_on(False)
+    #ax_marg_top.set_autoscaley_on(False)
 
-    ax_joint.imshow(image, cmap='gray', vmin=0, vmax=1)
-    ax_marg_top.hist(x_marginal)
-    ax_marg_side.hist(y_marginal, orientation="horizontal")
+    ax_joint.imshow(image, cmap='gray', vmin=0, vmax=image.max(), origin='lower')
+    ax_marg_top.bar(np.arange(x_marginal.shape[0]), x_marginal)
+    ax_marg_side.barh(np.arange(y_marginal.shape[0]), y_marginal)
 
     # Turn off tick labels on marginals
-    #plt.setp(ax_marg_y.get_xticklabels(), visible=False)
-    #plt.setp(ax_marg_x.get_yticklabels(), visible=False)
+    plt.setp(ax_marg_top.get_xticklabels(), visible=False)
+    plt.setp(ax_marg_side.get_yticklabels(), visible=False)
 
 
     # Set labels on joint
-    ax_joint.set_xlabel('Joint x label')
-    ax_joint.set_ylabel('Joint y label')
+    #ax_joint.set_xlabel('Joint x label')
+    #ax_joint.set_ylabel('Joint y label')
 
     # Set labels on marginals
-    ax_marg_side.set_xlabel('Marginal side')
-    ax_marg_top.set_ylabel('Marginal top')
+    #ax_marg_side.set_xlabel('Marginal side')
+    #ax_marg_top.set_ylabel('Marginal top')
     plt.show()
+
 
 def test_marginals():
     img = np.random.random((4, 4))
@@ -251,15 +256,15 @@ def test_marginals():
 def test_co_ords():
     height, width = 16, 16
     hm = torch.zeros(1, 1, height, width)
-    hm[0, 0, 0, 15] = 1.0
+    hm[0, 0, 0, 15] = 8.0
     k, p = MF.spacial_softmax(hm, probs=True)
     g = MF.gaussian_like_function(k, height, width)
     #plot_heightmap3d(hm[0, 0].detach().numpy())
     #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
     #plot_single_channel(hm[0, 0])
     #plot_single_channel(g[0, 0])
-    #plot_joint(hm[0, 0], p[1][0], p[0][0])
-    plot_marginal(p[0][0])
+    plot_joint(hm[0, 0], p[1][0].numpy().squeeze(), p[0][0].numpy().squeeze())
+    #plot_marginal(p[0][0])
 
 
 
