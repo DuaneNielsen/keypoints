@@ -14,6 +14,7 @@ from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 from torch.utils.tensorboard import SummaryWriter
 from math import floor
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 colormap = ["FF355E",
             "8ffe09",
@@ -242,38 +243,55 @@ def plot_keypoints_on_image(k, image_tensor, radius=1, thickness=1):
     return img_pil
 
 
-def plot_joint(image, x_marginal, y_marginal, k):
+def plot_joint(cnvs, x_marginal, y_marginal, k, g):
     w, h = matplotlib.figure.figaspect(1.0)
-    fig = plt.figure(figsize=(w, h))
+    fig = plt.figure(figsize=(h, w), dpi=80)
+    canvas = FigureCanvas(fig)
 
-    gs = GridSpec(4, 4)
+    gs = GridSpec(4, 7)
 
-    ax_joint = fig.add_subplot(gs[1:4, 0:3])
+    top = gs[0, 3:5]
+    side = gs[1:3, 6]
+    joint = gs[1:3, 3:5]
+    gauss = gs[1:3, 0:2]
 
-    ax_marg_top = fig.add_subplot(gs[0, 0:3])
-    ax_marg_top_kp = fig.add_subplot(gs[0, 0:3])
+    plt.axis('tight')
 
-    ax_marg_side = fig.add_subplot(gs[1:4, 3])
-    ax_marg_side_kp = fig.add_subplot(gs[1:4, 3])
+    ax_joint = fig.add_subplot(joint)
 
-    ax_joint.imshow(image, cmap='gray', vmin=0, vmax=image.max(), origin='lower')
+    ax_g = fig.add_subplot(gauss)
+
+    ax_marg_top = fig.add_subplot(top)
+    ax_marg_top_kp = fig.add_subplot(top)
+
+    ax_marg_side = fig.add_subplot(side)
+    ax_marg_side_kp = fig.add_subplot(side)
+
+    ax_joint.imshow(cnvs, cmap='gray', vmin=0, vmax=cnvs.max(), origin='lower')
+    ax_g.imshow(g, cmap='gray', vmin=0, vmax=g.max(), origin='lower')
 
     width = x_marginal.shape[0]
     ax_marg_top.bar(np.arange(width), x_marginal)
     xbins = np.zeros(width)
     k_w = floor(k[1].item() * width)
     xbins[k_w] = x_marginal.max()
-    ax_marg_top_kp.bar(np.arange(width), xbins)
+    ax_marg_top_kp.bar(np.arange(width), xbins, alpha=0.5)
 
     height = y_marginal.shape[0]
     ax_marg_side.barh(np.arange(height), y_marginal)
     ybins = np.zeros(height)
     k_h = floor(k[0].item() * height)
     ybins[k_h] = y_marginal.max()
-    ax_marg_side_kp.barh(np.arange(height), ybins)
+    ax_marg_side_kp.barh(np.arange(height), ybins, alpha=0.5)
 
     # Turn off tick labels on marginals
+    plt.setp(ax_joint.get_xticklabels(), visible=False)
     plt.setp(ax_marg_top.get_xticklabels(), visible=False)
+    plt.setp(ax_marg_top_kp.get_xticklabels(), visible=False)
     plt.setp(ax_marg_side.get_yticklabels(), visible=False)
+    plt.setp(ax_marg_side_kp.get_yticklabels(), visible=False)
 
-    plt.show()
+    canvas.draw()
+    s, (width, height) = canvas.print_to_buffer()
+    cnvs = np.fromstring(s, np.uint8).reshape((height, width, 4))
+    return cnvs

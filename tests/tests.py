@@ -213,16 +213,25 @@ def test_marginals():
 
 
 def test_co_ords():
-    height, width = 16, 24
+    height, width = 16, 16
     hm = torch.zeros(1, 1, height, width)
-    hm[0, 0, 0, 15] = 180.0
+    hm[0, 0, 0, 15] = 20.0
     k, p = MF.spacial_softmax(hm, probs=True)
     g = MF.gaussian_like_function(k, height, width)
     #plot_heightmap3d(hm[0, 0].detach().numpy())
     #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
     #plot_single_channel(hm[0, 0])
     #plot_single_channel(g[0, 0])
-    plot_joint(hm[0, 0], p[1][0].numpy().squeeze(), p[0][0].numpy().squeeze(), k[0, 0].numpy())
+    image = plot_joint(hm[0, 0], p[1][0].numpy().squeeze(),
+                       p[0][0].numpy().squeeze(),
+                       k[0, 0].numpy(),
+                       g[0, 0].numpy())
+    d = UniImageViewer()
+    d.render(image, block=True)
+    v = UniImageViewer()
+    v.render(g[0, 0], block=True)
+    #plt.imshow(image)
+    #plt.show()
     #plot_marginal(p[0][0])
 
 
