@@ -2,18 +2,11 @@ import models.functional as MF
 from models import knn, losses
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.functional as TVF
 from tps import tps_grid, tps_random
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 import numpy as np
-from utils import plot_keypoints_on_image, UniImageViewer
-import torchvision.transforms as tvt
+from utils import plot_keypoints_on_image, UniImageViewer, plot_joint
 from tests.common import bad_monkey
-from mpl_toolkits.mplot3d import Axes3D
-from PIL import Image
-from matplotlib.gridspec import GridSpec
-import matplotlib.figure
 
 heatmap_batch = torch.tensor([
     [
@@ -212,41 +205,6 @@ def plot_marginal(tensor):
     plt.show()
 
 
-def plot_joint(image, x_marginal, y_marginal, k):
-    w, h = matplotlib.figure.figaspect(1.0)
-    fig = plt.figure(figsize=(w, h))
-
-    gs = GridSpec(4, 4)
-
-    ax_joint = fig.add_subplot(gs[1:4, 0:3])
-
-    ax_marg_top = fig.add_subplot(gs[0, 0:3])
-    ax_marg_top_kp = fig.add_subplot(gs[0, 0:3])
-
-    ax_marg_side = fig.add_subplot(gs[1:4, 3])
-    ax_marg_side_kp = fig.add_subplot(gs[1:4, 3])
-
-    ax_joint.imshow(image, cmap='gray', vmin=0, vmax=image.max(), origin='lower')
-
-    width = x_marginal.shape[0]
-    ax_marg_top.bar(np.arange(width), x_marginal)
-    xbins = np.zeros(width)
-    xbins[8] = x_marginal.max()
-    ax_marg_top_kp.bar(np.arange(width), xbins)
-
-    height = y_marginal.shape[0]
-    ax_marg_side.barh(np.arange(height), y_marginal)
-    ybins = np.zeros(height)
-    ybins[8] = y_marginal.max()
-    ax_marg_side_kp.barh(np.arange(height), ybins)
-
-    # Turn off tick labels on marginals
-    plt.setp(ax_marg_top.get_xticklabels(), visible=False)
-    plt.setp(ax_marg_side.get_yticklabels(), visible=False)
-
-    plt.show()
-
-
 def test_marginals():
     img = np.random.random((4, 4))
     x_marginal = np.mean(img, axis=0)
@@ -255,16 +213,16 @@ def test_marginals():
 
 
 def test_co_ords():
-    height, width = 16, 16
+    height, width = 16, 24
     hm = torch.zeros(1, 1, height, width)
-    hm[0, 0, 0, 15] = 8.0
+    hm[0, 0, 0, 15] = 180.0
     k, p = MF.spacial_softmax(hm, probs=True)
     g = MF.gaussian_like_function(k, height, width)
     #plot_heightmap3d(hm[0, 0].detach().numpy())
     #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
     #plot_single_channel(hm[0, 0])
     #plot_single_channel(g[0, 0])
-    plot_joint(hm[0, 0], p[1][0].numpy().squeeze(), p[0][0].numpy().squeeze(),  k[0, 0].numpy())
+    plot_joint(hm[0, 0], p[1][0].numpy().squeeze(), p[0][0].numpy().squeeze(), k[0, 0].numpy())
     #plot_marginal(p[0][0])
 
 

@@ -1,3 +1,4 @@
+import matplotlib.figure
 import torch
 import cv2
 import numpy as np
@@ -8,8 +9,11 @@ import torchvision.transforms.functional as F
 
 from colorama import Fore, Style
 import logging
-from torch.utils.tensorboard import SummaryWriter
 
+from matplotlib import pyplot as plt
+from matplotlib.gridspec import GridSpec
+from torch.utils.tensorboard import SummaryWriter
+from math import floor
 
 colormap = ["FF355E",
             "8ffe09",
@@ -236,3 +240,40 @@ def plot_keypoints_on_image(k, image_tensor, radius=1, thickness=1):
     img_pil = Image.fromarray(img)
 
     return img_pil
+
+
+def plot_joint(image, x_marginal, y_marginal, k):
+    w, h = matplotlib.figure.figaspect(1.0)
+    fig = plt.figure(figsize=(w, h))
+
+    gs = GridSpec(4, 4)
+
+    ax_joint = fig.add_subplot(gs[1:4, 0:3])
+
+    ax_marg_top = fig.add_subplot(gs[0, 0:3])
+    ax_marg_top_kp = fig.add_subplot(gs[0, 0:3])
+
+    ax_marg_side = fig.add_subplot(gs[1:4, 3])
+    ax_marg_side_kp = fig.add_subplot(gs[1:4, 3])
+
+    ax_joint.imshow(image, cmap='gray', vmin=0, vmax=image.max(), origin='lower')
+
+    width = x_marginal.shape[0]
+    ax_marg_top.bar(np.arange(width), x_marginal)
+    xbins = np.zeros(width)
+    k_w = floor(k[1].item() * width)
+    xbins[k_w] = x_marginal.max()
+    ax_marg_top_kp.bar(np.arange(width), xbins)
+
+    height = y_marginal.shape[0]
+    ax_marg_side.barh(np.arange(height), y_marginal)
+    ybins = np.zeros(height)
+    k_h = floor(k[0].item() * height)
+    ybins[k_h] = y_marginal.max()
+    ax_marg_side_kp.barh(np.arange(height), ybins)
+
+    # Turn off tick labels on marginals
+    plt.setp(ax_marg_top.get_xticklabels(), visible=False)
+    plt.setp(ax_marg_side.get_yticklabels(), visible=False)
+
+    plt.show()
