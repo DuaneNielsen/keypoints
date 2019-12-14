@@ -18,6 +18,7 @@ class ConfigException(Exception):
 
 """ dataset which generates a white square in the middle of color image """
 
+
 def square(offset, height):
     top_left = Pos(offset.x, offset.y)
     top_right = Pos(offset.x + height.x, offset.y)
@@ -63,51 +64,78 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
 
 """ Atari dataset generator """
 
+
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
     s = s[25:, :]
+    s = cv2.resize(s, dsize=(64, 64), interpolation=cv2.INTER_NEAREST)
+    return s
+
+
+def pong_color_prepro(s):
+    s = s[:, 25:, :]
     s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_LINEAR)
     return s
 
 
+def if_done(done, r):
+    return done
+
+
+def if_done_or_nonzero_reward(done, r):
+    return done or r != 0
+
+
 class AtariDataset(torch.utils.data.dataset.Dataset):
-    def __init__(self, env, size, prepro):
+    def __init__(self, env, size, prepro, end_trajectory=if_done, skip_first=False):
         super().__init__()
-        self.env = gym.make(env)
         self.prepro = prepro
+        self.end_trajectory = end_trajectory
+        self.env = gym.make(env)
+        self.env.reset()
         self.trajectories = []
         self.index = []
+        self.skip_first = skip_first
         self._fill(size)
 
-    def _trajectory(self):
+    def _trajectory(self, reset):
         frames = []
-        s = self.env.reset()
-        ps = self.prepro(s)
-        frames.append(ps)
+        if reset:
+            self.env.reset()
         done = False
+        r = 0
 
-        while not done:
+        while not self.end_trajectory(done, r):
             s, r, done, info = self.env.step(self.env.action_space.sample())
             ps = self.prepro(s)
             frames.append(ps)
 
-        return np.stack(frames, axis=0)
+        return np.stack(frames, axis=0), done
 
     def __len__(self):
         return len(self.index)
 
     def _fill(self, samples):
         traj_id = 0
+        done = False
+        first = True
+
         while len(self) < samples:
-            t = self._trajectory()
-            self.trajectories.append(t)
-            for i in range(t.shape[0] - 1):
-                self.index.append((traj_id, i))
-            traj_id += 1
+            t, done = self._trajectory(reset=done)
+            if not first:
+                self.trajectories.append(t)
+                first = done
+                for i in range(t.shape[0] - 1):
+                    self.index.append((traj_id, i))
+                traj_id += 1
+            else:
+                # skip the first trajectory cos it's suspect
+                first = False
+
 
     def __getitem__(self, item):
         trajectory, i = self.index[item]
-        return self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1]
+        return self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1], trajectory
 
 
 D_CELEBA = 'celeba'

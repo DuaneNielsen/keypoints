@@ -43,8 +43,8 @@ if __name__ == '__main__':
 
     """ data augmentation parameters """
     parser.add_argument('--tps_cntl_pts', type=int, default=4)
-    parser.add_argument('--tps_variance', type=float, default=0.11)
-    parser.add_argument('--max_rotate', type=float, default=0.2)
+    parser.add_argument('--tps_variance', type=float, default=0.05)
+    parser.add_argument('--max_rotate', type=float, default=0.1)
 
     args = parser.parse_args()
 
@@ -65,11 +65,11 @@ if __name__ == '__main__':
 
     """ model """
     encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
-    encoder = knn.Unit('encoder', 3, 64, encoder_core)
+    encoder = knn.Unit('encoder', 3, 64, encoder_core, out_batch_norm=False)
     decoder_core = vgg.make_layers(vgg.decoder_cfg['F'])
     decoder = knn.Unit('decoder', 64 + args.num_keypoints, 3, decoder_core)
     keypoint_core = vgg.make_layers(vgg.vgg_cfg['F'])
-    keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core)
+    keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core, out_batch_norm=False)
     keymapper = knn.GaussianLike(sigma=0.1)
     kp_network = keynet.KeyNet('vgg_keynet', encoder, keypoint, keymapper, decoder).to(device)
 
@@ -99,11 +99,12 @@ if __name__ == '__main__':
         batch = tqdm(train_l, total=len(train) // args.batch_size)
         for i, (x, _) in enumerate(batch):
             x = x.to(args.device)
+            loss_mask = x.ones_like()
             x = peturb(x)
             x_ = peturb(x)
 
             optim.zero_grad()
-            x_t, z, k, m = kp_network(x, x_)
+            x_t, z, k, m, p, heatmap = kp_network(x, x_)
             loss = criterion(x_t, x_)
             #loss, loss_image, loss_mask = criterion(x_t, x_)
 
@@ -115,7 +116,7 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
-            display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, m, type='Train')
+            display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, type='Train')
 
         """ test  """
         with torch.no_grad():
@@ -126,10 +127,10 @@ if __name__ == '__main__':
                 x = peturb(x)
                 x_ = peturb(x)
 
-                x_t, z, k, m = kp_network(x, x_)
+                x_t, z, k, m, p, heatmap = kp_network(x, x_)
                 loss = criterion(x_t, x_)
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, k, m, type='Test')
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, type='Test')
 
             ave_loss, best_loss = display.end_epoch(epoch, optim)
             scheduler.step(ave_loss)

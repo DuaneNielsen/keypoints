@@ -38,6 +38,7 @@ def heatmap(value=1.0, batch=1, channels=1):
 
 
 
+
 def test_plot():
     z = np.array([[x ** 2 + y ** 2 for x in range(20)] for y in range(20)])
     x, y = np.meshgrid(range(z.shape[0]), range(z.shape[1]))
@@ -170,6 +171,27 @@ def test_align_kp_with_gaussian():
     plot_heatmap2d(z)
 
 
+def test_pattern(height, width, dim):
+    if dim == 1:
+        return torch.linspace(0, 1, width).expand(height, width).unsqueeze(0)
+    elif dim == 0:
+        return torch.linspace(0, 1, height).expand(width, height).permute(1, 0).unsqueeze(0)
+
+
+def test_coordinate_display():
+    img = test_pattern(16, 32, dim=0)
+    top_marginal = torch.sum(img, dim=1)
+    side_marginal = torch.sum(img, dim=2)
+    k = torch.tensor([0.5, 0.8]).expand(1, 1, 2)
+    #plt.imshow(img[0], cmap='gray', vmin=0, vmax=img.max(), origin='lower')
+    #plot_joint(img[0], top_marginal[0], side_marginal[0], k[0, 0])
+
+    img = plot_keypoints_on_image(k[0], img)
+    plt.imshow(img)
+
+    plt.show()
+
+
 def plot_heatmap2d(z):
     # show height map in 2d
     plt.figure()
@@ -222,14 +244,9 @@ def test_co_ords():
     #plot_heightmap3d(g[0, 0].detach().numpy(), k[0, 0])
     #plot_single_channel(hm[0, 0])
     #plot_single_channel(g[0, 0])
-    image = plot_joint(hm[0, 0], p[1][0].numpy().squeeze(),
-                       p[0][0].numpy().squeeze(),
-                       k[0, 0].numpy(),
-                       g[0, 0].numpy())
+
     d = UniImageViewer()
     d.render(image, block=True)
-    v = UniImageViewer()
-    v.render(g[0, 0], block=True)
     #plt.imshow(image)
     #plt.show()
     #plot_marginal(p[0][0])

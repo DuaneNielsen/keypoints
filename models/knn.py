@@ -107,18 +107,18 @@ class SpatialSoftmax(torch.nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, heatmap):
-        return spacial_softmax(heatmap)
+    def forward(self, heatmap, probs=False):
+        return spacial_softmax(heatmap, probs)
 
 
 class Unit(nn.Module):
-    def __init__(self, name, in_channels, out_channels, core, batch_norm=True):
+    def __init__(self, name, in_channels, out_channels, core, in_batch_norm=True, out_batch_norm=True):
         super().__init__()
         self.name = name
         core_in_channels, core_out_channels = self._core_channels(core)
 
         in_block = [nn.Conv2d(in_channels, core_in_channels, kernel_size=3, stride=1, padding=1)]
-        if batch_norm:
+        if in_batch_norm:
             in_block += [nn.BatchNorm2d(core_in_channels)]
         in_block += [nn.ReLU()]
         self.in_block = nn.Sequential(*in_block)
@@ -126,7 +126,7 @@ class Unit(nn.Module):
         self.core = core
 
         out_block = [nn.Conv2d(core_out_channels, out_channels, kernel_size=1, stride=1)]
-        if batch_norm:
+        if out_batch_norm:
             out_block += [nn.BatchNorm2d(out_channels)]
         out_block += [nn.ReLU()]
         self.out_block = nn.Sequential(*out_block)

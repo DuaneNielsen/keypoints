@@ -22,12 +22,12 @@ class KeyNet(knn.Container):
         z = self.encoder(x)
 
         heatmap = self.keypoint(x_t)
-        k = self.ssm(heatmap)
+        k, p = self.ssm(heatmap, probs=True)
         m = self.key2map(k, height=z.size(2), width=z.size(3))
 
         x_t = self.decoder(torch.cat((z, m), dim=1))
 
-        return x_t, z, k, m
+        return x_t, z, k, m, p, heatmap
 
     def load(self, run_id):
         self.encoder.load(self.name, run_id)

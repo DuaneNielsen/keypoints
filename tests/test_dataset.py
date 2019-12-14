@@ -1,14 +1,14 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import datasets as b
-from datasets import Pos, SquareDataset, AtariDataset, pong_prepro
+import datasets as d
+from datasets import Pos, SquareDataset, AtariDataset, pong_prepro, if_done_or_nonzero_reward
 from torch.utils.data import DataLoader
 import gym
 from utils import UniImageViewer
 
 def test_render_square():
-    a3 = b.square(Pos(40, 40), Pos(50, 50))
+    a3 = d.square(Pos(40, 40), Pos(50, 50))
     im = np.zeros([128, 128, 3], dtype=np.uint8)
     cv2.fillPoly(im, a3, (0, 255, 255))
     im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
@@ -43,6 +43,20 @@ def test_pong():
 
 
 def test_pong_fill():
-    ds = AtariDataset('Pong-v0', 3000, pong_prepro)
-    assert len(ds) >= 3000
+    l = 30
+    display = False
+
+    ds = AtariDataset('Pong-v0', l, d.pong_prepro, end_trajectory=if_done_or_nonzero_reward)
+    assert len(ds) >= l
     print(len(ds))
+
+    disp = UniImageViewer()
+
+    for img in ds:
+        i = np.concatenate((img[0], img[1]), axis=1)
+        print(img[2])
+        if display:
+            disp.render(i)
+        else:
+            plt.imshow(i, cmap='gray', vmin=0, vmax=256.0)
+            plt.show()
