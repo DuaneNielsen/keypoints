@@ -119,21 +119,26 @@ def uniform_grid(shape):
     return c
 
 
-def tps_random(x, num_control_points=6, var=0.5):
+def tps_sample_params(batch_size, num_control_points, var=0.05):
+    theta = torch.randn(batch_size, num_control_points + 3, 2) * var
+    cnt_points = torch.rand(batch_size, num_control_points, 2)
+    return theta, cnt_points
+
+
+def tps_transform(x, theta, cnt_points):
     device = x.device
-    theta = torch.randn(x.size(0), num_control_points + 3, 2) * var
-    c = torch.rand(x.size(0), num_control_points, 2)
-    grid = tps_grid(theta, c, x.shape).type_as(x).to(device)
+    grid = tps_grid(theta, cnt_points, x.shape).type_as(x).to(device)
     return F.grid_sample(x, grid, padding_mode='zeros')
 
 
 class RandomTPSTransform(object):
-    def __init__(self, num_control=4, variance=0.11):
+    def __init__(self, num_control=4, variance=0.05):
         self.num_control = num_control
         self.var = variance
 
     def __call__(self, x):
-        return tps_random(x, self.num_control, self.var)
+        theta, cnt_points = tps_sample_params(x.size(0), self.num_control, self.var)
+        return tps_transform(x, theta, cnt_points)
 
 
 def rotate_affine_grid(x, theta):
@@ -145,12 +150,13 @@ def rotate_affine_grid(x, theta):
     grid = F.affine_grid(theta, x.shape)
     return F.grid_sample(x, grid, padding_mode='zeros')
 
+
 def rotate_affine_grid_multi(x, theta):
     theta = theta.to(x.device)
     cos_theta = torch.cos(theta)
     sin_theta = torch.sin(theta)
 
-    transform = torch.zeros(x.size(0), 2, 3)
+    transform = torch.zeros(x.size(0), 2, 3, dtype=x.dtype)
     transform[:, 0, 0] = cos_theta
     transform[:, 0, 1] = sin_theta
     transform[:, 1, 0] = - sin_theta
@@ -174,7 +180,7 @@ class RotateMulti(object):
         self.theta = theta
 
     def __call__(self, x):
-        theta = torch.full((x.size(0), ) ,self.theta, device=x.device)
+        theta = torch.full((x.size(0), ), self.theta, device=x.device)
         return rotate_affine_grid_multi(x, theta)
 
 

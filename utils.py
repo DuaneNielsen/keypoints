@@ -70,15 +70,17 @@ class ResultsLogger(object):
         if self.tb:
             self.tb.add_text(mesg, 'Config', global_step=0)
 
-    def build_panel(self, x, x_, x_t, hm, p, k, m, *images):
+    def build_panel(self, x, x_, x_t, hm, p, k, m, loss_mask, *images):
         height, width = x.size(2), x.size(3)
         kp_image = plot_keypoints_on_image(k[0], x_[0].float())
-        kp_image_t = transforms.ToTensor()(kp_image).to(x.device)
+        kp_image_t = F.to_tensor(kp_image).to(x.device)
+
         bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m)
         bottleneck_image = cv2.cvtColor(bottleneck_image, cv2.COLOR_RGBA2RGB)
-        bottleneck_image_t = transforms.ToTensor()(bottleneck_image).to(x.device)
+        bottleneck_image_t = F.to_tensor(bottleneck_image).to(x.device)
         bottleneck_image_t = resize2D(bottleneck_image_t, (height, width*2))
-        panel = [x[0].float(), x_[0].float(), x_t[0].float(), kp_image_t, bottleneck_image_t]
+
+        panel = [x[0].float(), x_[0].float(), loss_mask[0], x_t[0].float(), kp_image_t, bottleneck_image_t]
         for i in images:
             resized = resize2D(i[0], (height, width))
             panel.append(resized.float())
@@ -88,7 +90,7 @@ class ResultsLogger(object):
     def display(self, panel, blocking=False):
         self.viewer.render(panel, blocking)
 
-    def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, hm, k, m, p, type, depth=None):
+    def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, hm, k, m, p, loss_mask, type, depth=None):
         self.ll.append(loss.item())
         if depth is not None and len(self.ll) > depth:
             self.ll.pop(0)
@@ -98,7 +100,7 @@ class ResultsLogger(object):
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if not batch_i % 8:
-            panel = self.build_panel(x=x, x_=x_, x_t=x_t, hm=hm, p=p, k=k, m=m)
+            panel = self.build_panel(x=x, x_=x_, x_t=x_t, hm=hm, p=p, k=k, m=m, loss_mask=loss_mask)
             # display(x, x_, k, loss_image, loss_mask.expand(-1, 3, -1, -1))
             if self.visuals:
                 self.display(panel)

@@ -7,7 +7,7 @@ from torch.optim import SGD, Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from models import vgg, keynet
 from utils import ResultsLogger
-from tps import RandomTPSTransform, RandRotate
+from tps import RandomTPSTransform, RandRotate, tps_transform, tps_sample_params, rotate_affine_grid_multi
 from apex import amp
 from datasets import get_dataset
 import argparse
@@ -58,10 +58,22 @@ if __name__ == '__main__':
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
     """ data augmentation """
-    peturb = transforms.Compose([
-        RandRotate(max=args.max_rotate),
-        RandomTPSTransform(variance=args.tps_variance)
-    ])
+    # peturb = transforms.Compose([
+    #     RandRotate(max=args.max_rotate),
+    #     RandomTPSTransform(variance=args.tps_variance)
+    # ])
+
+    def rand_peturb_params(batch_items):
+        theta_tps, cntl_pts = tps_sample_params(batch_items, args.tps_cntl_pts, args.tps_variance)
+        theta_rotate = torch.rand(batch_items) * 2 - 1
+        theta_rotate = theta_rotate * args.max_rotate
+        return theta_tps, cntl_pts, theta_rotate
+
+    def peturb(x, tps_theta, cntl_pts, theta_rotate):
+        x = tps_transform(x, tps_theta, cntl_pts)
+        x = rotate_affine_grid_multi(x, theta_rotate)
+        return x
+
 
     """ model """
     encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
@@ -90,7 +102,6 @@ if __name__ == '__main__':
 
     """ loss function """
     criterion = nn.MSELoss()
-    #criterion = models.DiscountBlackLoss()
 
     for epoch in range(1, args.epochs + 1):
 
@@ -98,15 +109,21 @@ if __name__ == '__main__':
         """ training """
         batch = tqdm(train_l, total=len(train) // args.batch_size)
         for i, (x, _) in enumerate(batch):
+            bsize = x.size(0)
             x = x.to(args.device)
-            loss_mask = x.ones_like()
-            x = peturb(x)
-            x_ = peturb(x)
+            loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
+
+            theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
+            x = peturb(x, theta_tps, cntl_pts, theta_rotate)
+            x_loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
+
+            theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
+            x_ = peturb(x, theta_tps, cntl_pts, theta_rotate)
+            x__loss_mask = peturb(x_loss_mask, theta_tps, cntl_pts, theta_rotate)
 
             optim.zero_grad()
             x_t, z, k, m, p, heatmap = kp_network(x, x_)
             loss = criterion(x_t, x_)
-            #loss, loss_image, loss_mask = criterion(x_t, x_)
 
             if args.train_mode:
                 if args.device != 'cpu':
@@ -116,7 +133,7 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
-            display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, type='Train')
+            display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, x__loss_mask, type='Train')
 
         """ test  """
         with torch.no_grad():
@@ -124,6 +141,7 @@ if __name__ == '__main__':
             ll = []
             for i, (x, _) in enumerate(batch):
                 x = x.to(args.device)
+
                 x = peturb(x)
                 x_ = peturb(x)
 
