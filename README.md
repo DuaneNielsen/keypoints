@@ -5,4 +5,4 @@ Replication of
 [Tomas Jakab*](http://www.robots.ox.ac.uk/~tomj), [Ankush Gupta*](http://www.robots.ox.ac.uk/~ankush), Hakan Bilen, Andrea Vedaldi (* equal contribution).
 Advances in Neural Information Processing Systems (NeurIPS) 2018.
 
-by Duane
+in Pytorch by Duane

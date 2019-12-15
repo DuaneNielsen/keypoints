@@ -55,10 +55,12 @@ class ResultsLogger(object):
         self.best_loss = 1e10
         self.visuals = visuals
         logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s',
-                            level=logging.DEBUG, handlers=[logging.FileHandler(logfile, 'a', 'utf-8')])
+                            level=logging.DEBUG,
+                            handlers=[logging.FileHandler(logfile, 'a', 'utf-8')])
         self.step = 0
-        self.tb = SummaryWriter(log_dir=f'data/keypoint_net/{model_name}/run{str(run_id)}'
-                                    , comment=comment)
+        self.name = model_name
+        log_dir = f'data/models/{self.name}/run_{run_id}'
+        self.tb = SummaryWriter(log_dir=log_dir, comment=comment)
 
     def header(self, args):
 

@@ -34,7 +34,7 @@ if __name__ == '__main__':
     parser.add_argument('--optimizer', type=str, default='Adam')
 
     """ model parameters """
-    parser.add_argument('--model_name', type=str, default='vgg_kp_11')
+    parser.add_argument('--model_name', type=str)
     parser.add_argument('--num_keypoints', type=int, default=10)
 
     """ hyper-parameters """
@@ -69,11 +69,24 @@ if __name__ == '__main__':
         theta_rotate = theta_rotate * args.max_rotate
         return theta_tps, cntl_pts, theta_rotate
 
+
     def peturb(x, tps_theta, cntl_pts, theta_rotate):
         x = tps_transform(x, tps_theta, cntl_pts)
         x = rotate_affine_grid_multi(x, theta_rotate)
         return x
 
+
+    def augment(x):
+        loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
+        bsize = x.size(0)
+        theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
+        x = peturb(x, theta_tps, cntl_pts, theta_rotate)
+        loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
+
+        theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
+        x_ = peturb(x, theta_tps, cntl_pts, theta_rotate)
+        loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
+        return x, x_, loss_mask
 
     """ model """
     encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
@@ -83,7 +96,7 @@ if __name__ == '__main__':
     keypoint_core = vgg.make_layers(vgg.vgg_cfg['F'])
     keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core, out_batch_norm=False)
     keymapper = knn.GaussianLike(sigma=0.1)
-    kp_network = keynet.KeyNet('vgg_keynet', encoder, keypoint, keymapper, decoder).to(device)
+    kp_network = keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder).to(device)
 
     if args.reload != 0:
         kp_network.load(args.reload)
@@ -101,7 +114,14 @@ if __name__ == '__main__':
         model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
 
     """ loss function """
-    criterion = nn.MSELoss()
+    #criterion = nn.MSELoss()
+
+    def l2_reconstruction_loss(x, x_, loss_mask):
+        loss = (x - x_) ** 2
+        loss = loss * loss_mask
+        return torch.mean(loss)
+
+    criterion = l2_reconstruction_loss
 
     for epoch in range(1, args.epochs + 1):
 
@@ -109,21 +129,13 @@ if __name__ == '__main__':
         """ training """
         batch = tqdm(train_l, total=len(train) // args.batch_size)
         for i, (x, _) in enumerate(batch):
-            bsize = x.size(0)
             x = x.to(args.device)
-            loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
-
-            theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
-            x = peturb(x, theta_tps, cntl_pts, theta_rotate)
-            x_loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
-
-            theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
-            x_ = peturb(x, theta_tps, cntl_pts, theta_rotate)
-            x__loss_mask = peturb(x_loss_mask, theta_tps, cntl_pts, theta_rotate)
+            x, x_, loss_mask = augment(x)
 
             optim.zero_grad()
             x_t, z, k, m, p, heatmap = kp_network(x, x_)
-            loss = criterion(x_t, x_)
+
+            loss = criterion(x_t, x_, loss_mask)
 
             if args.train_mode:
                 if args.device != 'cpu':
@@ -133,7 +145,7 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
-            display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, x__loss_mask, type='Train')
+            display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Train', depth=20)
 
         """ test  """
         with torch.no_grad():
@@ -142,13 +154,12 @@ if __name__ == '__main__':
             for i, (x, _) in enumerate(batch):
                 x = x.to(args.device)
 
-                x = peturb(x)
-                x_ = peturb(x)
+                x, x_, loss_mask = augment(x)
 
                 x_t, z, k, m, p, heatmap = kp_network(x, x_)
-                loss = criterion(x_t, x_)
+                loss = criterion(x_t, x_, loss_mask)
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, type='Test')
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Test', depth=20)
 
             ave_loss, best_loss = display.end_epoch(epoch, optim)
             scheduler.step(ave_loss)
