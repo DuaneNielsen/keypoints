@@ -2,7 +2,7 @@ import models.functional as MF
 from models import knn, losses
 import torch
 import torch.nn.functional as F
-from tps import tps_grid, tps_random
+from tps import tps_grid
 import matplotlib.pyplot as plt
 import numpy as np
 from utils import plot_keypoints_on_image, UniImageViewer, plot_joint
@@ -246,7 +246,7 @@ def test_co_ords():
     #plot_single_channel(g[0, 0])
 
     d = UniImageViewer()
-    d.render(image, block=True)
+    #d.render(image, block=True)
     #plt.imshow(image)
     #plt.show()
     #plot_marginal(p[0][0])
@@ -283,11 +283,11 @@ def test_intermediate_grads():
 def test_plt_keypoints():
     num_monkeys = 1
     bm = bad_monkey(num_monkeys)
-    height, width = bm.size(2), bm.size(3)
-    heatmap = torch.rand(num_monkeys, 10, height, width, requires_grad=False)
-    ss = knn.SpatialSoftmax()
-    k = ss(heatmap)
-    image = plot_keypoints_on_image(k[0], bm[0], radius=3, thickness=3)
+    # height, width = bm.size(2), bm.size(3)
+    # heatmap = torch.rand(num_monkeys, 10, height, width, requires_grad=False)
+    # k = MF.spacial_softmax(heatmap)
+    k = torch.empty(1, 5, 2).uniform_(0.0, 1.0)
+    image = plot_keypoints_on_image(k[0], bm[0], radius=7, thickness=3)
     plt.imshow(image)
     plt.show()
 
@@ -348,7 +348,8 @@ def test_tps_random():
         set = []
 
         for _ in range(8):
-            set.append(tps_random(x, num_control_points=20, var=1 / i))
+            pass
+            # set.append(tps_random(x, num_control_points=20, var=1 / i))
 
         st = torch.cat(set, dim=2)
         images.append(st)
@@ -368,10 +369,11 @@ def test_dual_tps_random():
         set = []
 
         for _ in range(4):
-            img1 = tps_random(x, num_control_points=20, var=1 / i)
-            img2 = tps_random(img1, num_control_points=20, var=1 / i)
+            pass
+            # img1 = tps_random(x, num_control_points=20, var=1 / i)
+            # img2 = tps_random(img1, num_control_points=20, var=1 / i)
 
-            set.append(torch.cat((img1, img2), dim=2))
+            #set.append(torch.cat((img1, img2), dim=2))
 
         st = torch.cat(set, dim=2)
         images.append(st)
@@ -385,9 +387,9 @@ def test_dual_tps_random_batched():
     u = UniImageViewer(screen_resolution=(2400, 1200))
     x = bad_monkey(2)
 
-    img1 = tps_random(x, num_control_points=20, var=1 / 20)
-    img2 = tps_random(img1, num_control_points=20, var=1 / 20)
+    # img1 = tps_random(x, num_control_points=20, var=1 / 20)
+    # img2 = tps_random(img1, num_control_points=20, var=1 / 20)
 
-    img = torch.cat((torch.cat(img1.unbind(0), dim=2), torch.cat(img2.unbind(0), dim=2)), dim=1)
+    #img = torch.cat((torch.cat(img1.unbind(0), dim=2), torch.cat(img2.unbind(0), dim=2)), dim=1)
 
-    u.render(img, block=True)
+    #u.render(img, block=True)
