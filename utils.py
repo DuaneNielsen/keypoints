@@ -54,7 +54,7 @@ class ResultsLogger(object):
         super().__init__()
         self.ll = []
         self.scale = 2
-        self.viewer = UniImageViewer(title, screen_resolution=(128 * 5 * self.scale, 128 * self.scale))
+        self.viewer = UniImageViewer(title, screen_resolution=(128 * 5 * self.scale, 128 * 4 * self.scale))
         matplotlib_scale = 200
         kp_columns = math.ceil(num_keypoints / kp_rows)
         self.kp_viewer = UniImageViewer('bottleneck',
@@ -83,13 +83,6 @@ class ResultsLogger(object):
         if self.tb:
             self.tb.add_text(mesg, 'Config', global_step=0)
 
-    # def build_panel(self, *images):
-    #     panel = []
-    #     for img in images:
-    #         panel.append(to_numpyRGB(img))
-    #
-    #     return np.concatenate(panel, axis=1)
-
     def display(self, panel, blocking=False):
         self.viewer.render(panel, blocking)
 
@@ -103,8 +96,12 @@ class ResultsLogger(object):
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if not batch_i % self.image_capture_freq:
-            kp_image = plot_keypoints_on_image(k[0], x_[0])
-            panel = torch.cat([x[0], x_[0], x_t[0], loss_mask[0], F.to_tensor(kp_image)], dim=2)
+            panel = []
+            for i in range(4):
+                kp_image = plot_keypoints_on_image(k[i], x_[i])
+                panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], F.to_tensor(kp_image)], dim=2))
+            panel = torch.cat(panel, dim=1)
+
             bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
             bottleneck_image = cv2.cvtColor(bottleneck_image, cv2.COLOR_RGBA2RGB)
 
