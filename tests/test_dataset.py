@@ -43,8 +43,8 @@ def test_pong():
 
 
 def test_pong_fill():
-    l = 30
-    display = False
+    l = 3000
+    display = True
 
     ds = AtariDataset('Pong-v0', l, d.pong_prepro, end_trajectory=if_done_or_nonzero_reward)
     assert len(ds) >= l

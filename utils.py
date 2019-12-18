@@ -72,6 +72,8 @@ class ResultsLogger(object):
         self.image_capture_freq = image_capture_freq
         self.kp_rows = kp_rows
         self.debug_view = UniImageViewer()
+        self.test_view = UniImageViewer()
+
 
     def header(self, args):
 
@@ -83,9 +85,6 @@ class ResultsLogger(object):
         if self.tb:
             self.tb.add_text(mesg, 'Config', global_step=0)
 
-    def display(self, panel, blocking=False):
-        self.viewer.render(panel, blocking)
-
     def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, hm, k, m, p, loss_mask, type, depth=None):
         self.ll.append(loss.item())
         if depth is not None and len(self.ll) > depth:
@@ -96,23 +95,38 @@ class ResultsLogger(object):
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if not batch_i % self.image_capture_freq:
-            panel = []
+            train_panel = []
             for i in range(4):
                 kp_image = plot_keypoints_on_image(k[i], x_[i])
-                panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], F.to_tensor(kp_image)], dim=2))
-            panel = torch.cat(panel, dim=1)
+                train_panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], F.to_tensor(kp_image).to(x.device)], dim=2))
+            train_panel = torch.cat(train_panel, dim=1)
 
             bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
             bottleneck_image = cv2.cvtColor(bottleneck_image, cv2.COLOR_RGBA2RGB)
 
+            kp_positions = []
+            for i, (k_i, x_i) in enumerate(zip(k.unbind(0), x_.unbind(0))):
+                if i >= 20:
+                    break
+                kp_positions.append(plot_keypoints_on_image(k_i, x_i))
+
+            kp_positions += [np.ones(kp_positions[0].shape, dtype=kp_positions[0].dtype) * 254 for _ in range(20 - len(kp_positions))]
+
+            test_panel = []
+            for i in range(4):
+                test_panel.append(np.concatenate(kp_positions[i * 5: i * 5 + 5], axis=1))
+            test_panel = np.concatenate(test_panel, axis=0)
+
             if self.visuals:
-                self.display(panel)
+                self.viewer.render(train_panel)
                 self.kp_viewer.render(bottleneck_image)
+                self.test_view.render(test_panel)
             if self.tb:
                 scale = 2
-                panel = resize2D(panel, (panel.size(1) * scale, panel.size(2) * scale))
-                self.tb.add_image(f'{type}_panel', panel, global_step=self.step)
-                self.tb.add_image(f'{type}_kp', F.to_tensor(bottleneck_image), global_step=self.step)
+                train_panel = resize2D(train_panel, (train_panel.size(1) * scale, train_panel.size(2) * scale))
+                self.tb.add_image(f'{type}_in_out', train_panel, global_step=self.step)
+                self.tb.add_image(f'{type}_bottleneck', F.to_tensor(bottleneck_image), global_step=self.step)
+                self.tb.add_image(f'{type}_batch', F.to_tensor(test_panel), global_step=self.step)
 
         self.step += 1
 

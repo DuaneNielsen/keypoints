@@ -8,6 +8,7 @@ import torch.utils.data
 import torchvision as tv
 from torchvision import transforms
 import gym
+import skimage.measure
 
 Pos = collections.namedtuple('Pos', 'x, y')
 
@@ -68,7 +69,7 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
     s = s[25:, :]
-    s = cv2.resize(s, dsize=(64, 64), interpolation=cv2.INTER_NEAREST)
+    skimage.measure.block_reduce(s, (2, 2), np.max)
     return s
 
 
@@ -131,7 +132,6 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
             else:
                 # skip the first trajectory cos it's suspect
                 first = False
-
 
     def __getitem__(self, item):
         trajectory, i = self.index[item]
