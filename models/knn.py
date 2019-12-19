@@ -2,7 +2,6 @@ from pathlib import Path
 
 import torch
 from torch import nn as nn
-from torch.nn import Parameter, functional as F
 from models.functional import gaussian_like_function, spacial_softmax
 
 
@@ -36,10 +35,10 @@ class Container(nn.Module):
     def forward(self, *input):
         raise NotImplementedError()
 
-    def save(self, run_id):
+    def save(self, run_id, epoch):
         raise NotImplementedError()
 
-    def load(self, run_id):
+    def load(self, run_id, epoch):
         raise NotImplementedError()
 
 
@@ -147,24 +146,24 @@ class Unit(nn.Module):
                 last = m
         return first.in_channels, last.out_channels
 
-    def _save_block(self, model_name, run_id, unit, block):
-        path = Path(f'data/models/{model_name}/run_{run_id}/{self.name}/{unit}.mdl')
+    def _save_block(self, model_name, run_id, epoch, unit, block):
+        path = Path(f'data/models/{model_name}/run_{run_id}/{epoch}/{self.name}/{unit}.mdl')
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(block.state_dict(), str(path))
 
-    def _load_block(self, model_name, run_id, unit, block):
-        path = Path(f'data/models/{model_name}/run_{run_id}/{self.name}/{unit}.mdl')
+    def _load_block(self, model_name, run_id, epoch, unit, block):
+        path = Path(f'data/models/{model_name}/run_{run_id}/{epoch}/{self.name}/{unit}.mdl')
         block.load_state_dict(torch.load(str(path)))
 
-    def save(self, model_name, run_id):
-        self._save_block(model_name, run_id, 'in_block', self.in_block)
-        self._save_block(model_name, run_id, 'core', self.core)
-        self._save_block(model_name, run_id, 'out_block', self.out_block)
+    def save(self, model_name, run_id, epoch):
+        self._save_block(model_name, run_id, epoch, 'in_block', self.in_block)
+        self._save_block(model_name, run_id, epoch, 'core', self.core)
+        self._save_block(model_name, run_id, epoch, 'out_block', self.out_block)
 
-    def load(self, model_name, run_id):
-        self._load_block(model_name, run_id, 'in_block', self.in_block)
-        self._load_block(model_name, run_id, 'core', self.core)
-        self._load_block(model_name, run_id, 'out_block', self.out_block)
+    def load(self, model_name, run_id, epoch):
+        self._load_block(model_name, run_id, epoch, 'in_block', self.in_block)
+        self._load_block(model_name, run_id, epoch, 'core', self.core)
+        self._load_block(model_name, run_id, epoch, 'out_block', self.out_block)
 
 
 class FeatureBlock(nn.Module):

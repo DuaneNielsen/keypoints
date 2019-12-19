@@ -25,6 +25,8 @@ if __name__ == '__main__':
     parser.add_argument('--run_type', type=str, default='full')
     parser.add_argument('--train_mode', type=bool, default='True')
     parser.add_argument('--reload', type=int, default=0)
+    parser.add_argument('--resume', type=int, default=0)
+    parser.add_argument('--checkpoint_freq', type=int, default=100)
     parser.add_argument('--epochs', type=int, default=800)
     parser.add_argument('--data_root', type=str, default='data')
     parser.add_argument('--opt_level', type=str, default='O0')
@@ -105,8 +107,11 @@ if __name__ == '__main__':
     keymapper = knn.GaussianLike(sigma=0.1)
     kp_network = keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder).to(args.device)
 
+    if args.resume != 0:
+        kp_network.load(args.resume, 'checkpoint')
+
     if args.reload != 0:
-        kp_network.load(args.reload)
+        kp_network.load(args.reload, 'best')
 
     """ optimizer """
     if args.optimizer == 'Adam':
@@ -149,6 +154,9 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
+            if i % args.checkpoint_freq == 0:
+                kp_network.save(args.run_id, 'checkpoint')
+
             display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Train', depth=20)
 
         """ test  """
@@ -168,4 +176,4 @@ if __name__ == '__main__':
 
             """ save if model improved """
             if ave_loss <= best_loss and args.train_mode:
-                kp_network.save(args.run_id)
+                kp_network.save(args.run_id, 'best')
