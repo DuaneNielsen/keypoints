@@ -83,8 +83,8 @@ if __name__ == '__main__':
         x = rotate_affine_grid_multi(x, theta_rotate)
         return x
 
-
-    def augment(x):
+    def tps_and_rotate(data):
+        x = data[0]
         loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
         bsize = x.size(0)
         theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
@@ -96,15 +96,32 @@ if __name__ == '__main__':
         loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
         return x, x_, loss_mask
 
+    def nop(*data):
+        return data[0], data[1], None
+
     """ model """
-    encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
-    encoder = knn.Unit('encoder', 3, 64, encoder_core, out_batch_norm=False)
-    decoder_core = vgg.make_layers(vgg.decoder_cfg['F'])
-    decoder = knn.Unit('decoder', 64 + args.num_keypoints, 3, decoder_core)
-    keypoint_core = vgg.make_layers(vgg.vgg_cfg['F'])
-    keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core, out_batch_norm=False)
-    keymapper = knn.GaussianLike(sigma=0.1)
-    kp_network = keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder).to(args.device)
+    def make_small_vgg():
+        encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
+        encoder = knn.Unit('encoder', 3, 64, encoder_core, out_batch_norm=False)
+        decoder_core = vgg.make_layers(vgg.decoder_cfg['F'])
+        decoder = knn.Unit('decoder', 64 + args.num_keypoints, 3, decoder_core)
+        keypoint_core = vgg.make_layers(vgg.vgg_cfg['F'])
+        keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core, out_batch_norm=False)
+        keymapper = knn.GaussianLike(sigma=0.1)
+        return keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder)
+
+    def make_tiny_vgg(input_channels=1):
+        encoder_core = vgg.make_layers(vgg.vgg_cfg['PONG'])
+        encoder = knn.Unit('encoder', input_channels, 64, encoder_core, out_batch_norm=False)
+        decoder_core = vgg.make_layers(vgg.decoder_cfg['PONG'])
+        decoder = knn.Unit('decoder', 64 + args.num_keypoints, input_channels, decoder_core)
+        keypoint_core = vgg.make_layers(vgg.vgg_cfg['PONG'])
+        keypoint = knn.Unit('keypoint', input_channels, args.num_keypoints, keypoint_core, out_batch_norm=False)
+        keymapper = knn.GaussianLike(sigma=0.1)
+        return keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder)
+
+    kp_network = make_tiny_vgg()
+    kp_network = kp_network.to(args.device)
 
     if args.resume != 0:
         kp_network.load(args.resume, 'checkpoint')
@@ -125,20 +142,25 @@ if __name__ == '__main__':
         model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
 
     """ loss function """
-    def l2_reconstruction_loss(x, x_, loss_mask):
+    def l2_reconstruction_loss(x, x_, loss_mask=None):
         loss = (x - x_) ** 2
-        loss = loss * loss_mask
+        if loss_mask is not None:
+            loss = loss * loss_mask
         return torch.mean(loss)
 
     criterion = l2_reconstruction_loss
+    augment = nop
+
+    def to_device(data, device):
+        return tuple([x.to(device) for x in data])
 
     for epoch in range(1, args.epochs + 1):
 
         """ training """
         batch = tqdm(train_l, total=len(train) // args.batch_size)
-        for i, (x, _) in enumerate(batch):
-            x = x.to(args.device)
-            x, x_, loss_mask = augment(x)
+        for i, data in enumerate(batch):
+            data = to_device(data, device=args.device)
+            x, x_, loss_mask = augment(*data)
 
             optim.zero_grad()
             x_t, z, k, m, p, heatmap = kp_network(x, x_)
@@ -161,9 +183,9 @@ if __name__ == '__main__':
         """ test  """
         with torch.no_grad():
             batch = tqdm(test_l, total=len(test) // args.batch_size)
-            for i, (x, _) in enumerate(batch):
-                x = x.to(args.device)
-                x, x_, loss_mask = augment(x)
+            for i, data in enumerate(batch):
+                data = to_device(data, device=args.device)
+                x, x_, loss_mask = augment(*data)
 
                 x_t, z, k, m, p, heatmap = kp_network(x, x_)
                 loss = criterion(x_t, x_, loss_mask)

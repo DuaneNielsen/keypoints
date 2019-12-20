@@ -98,7 +98,11 @@ class ResultsLogger(object):
             train_panel = []
             for i in range(4):
                 kp_image = plot_keypoints_on_image(k[i], x_[i])
-                train_panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], F.to_tensor(kp_image).to(x.device)], dim=2))
+                if loss_mask is not None:
+                    train_panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], F.to_tensor(kp_image).to(x.device)], dim=2))
+                else:
+                    train_panel.append(
+                        torch.cat([x[i], x_[i], x_t[i], F.to_tensor(kp_image).to(x.device)], dim=2))
             train_panel = torch.cat(train_panel, dim=1)
 
             bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
@@ -168,10 +172,10 @@ def to_numpyRGB(image, invert_color=False):
     :return: the output image
     """
 
-    # if type(image) == Image.Image:
-    #     img = image.convert("RGB")
-    #     img = np.array(img)
-    #     return img
+    if type(image) == Image.Image:
+        img = image.convert("RGB")
+        img = np.array(img)
+        return img
 
     if type(image) == torch.Tensor:
         image = image.cpu().detach().numpy()

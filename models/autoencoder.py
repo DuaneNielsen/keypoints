@@ -15,12 +15,12 @@ class AutoEncoder(Container):
         x = self.decoder(z)
         return z, x
 
-    def load(self, run_id):
-        self.encoder.load(self.name, run_id)
-        self.decoder.load(self.name, run_id)
+    def load(self, run_id, epoch):
+        self.encoder.load(self.name, run_id, epoch)
+        self.decoder.load(self.name, run_id, epoch)
 
-    def save(self, run_id):
-        self.encoder.save(self.name, run_id)
-        self.decoder.save(self.name, run_id)
+    def save(self, run_id, epoch):
+        self.encoder.save(self.name, run_id, epoch)
+        self.decoder.save(self.name, run_id, epoch)
 
 

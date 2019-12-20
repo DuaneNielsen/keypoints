@@ -6,6 +6,8 @@ from datasets import Pos, SquareDataset, AtariDataset, pong_prepro, if_done_or_n
 from torch.utils.data import DataLoader
 import gym
 from utils import UniImageViewer
+from torchvision import transforms as T
+import time
 
 def test_render_square():
     a3 = d.square(Pos(40, 40), Pos(50, 50))
@@ -43,20 +45,22 @@ def test_pong():
 
 
 def test_pong_fill():
-    l = 3000
+    l = 6000
     display = True
 
-    ds = AtariDataset('Pong-v0', l, d.pong_prepro, end_trajectory=if_done_or_nonzero_reward)
+    ds = AtariDataset('Pong-v0', l, d.pong_prepro,
+                      transforms = T.Compose([T.ToTensor(), T.ToPILImage()]),
+                      end_trajectory=if_done_or_nonzero_reward)
     assert len(ds) >= l
     print(len(ds))
 
-    disp = UniImageViewer()
+    disp = UniImageViewer(screen_resolution=(512, 512))
 
-    for img in ds:
-        i = np.concatenate((img[0], img[1]), axis=1)
-        print(img[2])
+    for img1, img2 in ds:
+        #i = np.concatenate((img[0], img[1]), axis=1)
         if display:
-            disp.render(i)
+            disp.render(img1)
+            time.sleep(0.03)
         else:
-            plt.imshow(i, cmap='gray', vmin=0, vmax=256.0)
+            plt.imshow(img1, cmap='gray', vmin=0, vmax=256.0)
             plt.show()

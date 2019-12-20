@@ -9,6 +9,7 @@ import torchvision as tv
 from torchvision import transforms
 import gym
 import skimage.measure
+from tqdm import tqdm
 
 Pos = collections.namedtuple('Pos', 'x, y')
 
@@ -69,7 +70,8 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
     s = s[25:, :]
-    skimage.measure.block_reduce(s, (2, 2), np.max)
+    s = skimage.measure.block_reduce(s, (4, 4), np.max)
+    s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
     return s
 
 
@@ -88,8 +90,9 @@ def if_done_or_nonzero_reward(done, r):
 
 
 class AtariDataset(torch.utils.data.dataset.Dataset):
-    def __init__(self, env, size, prepro, end_trajectory=if_done, skip_first=False):
+    def __init__(self, env, size, prepro, transforms=None, end_trajectory=if_done, skip_first=False):
         super().__init__()
+        self.loadbar = tqdm(total=size, desc='LOADING TRAJECTORIES FROM SIMULATOR')
         self.prepro = prepro
         self.end_trajectory = end_trajectory
         self.env = gym.make(env)
@@ -98,6 +101,8 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
         self.index = []
         self.skip_first = skip_first
         self._fill(size)
+        self.transforms = transforms
+
 
     def _trajectory(self, reset):
         frames = []
@@ -129,13 +134,21 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
                 for i in range(t.shape[0] - 1):
                     self.index.append((traj_id, i))
                 traj_id += 1
+                self.loadbar.update(t.shape[0])
             else:
                 # skip the first trajectory cos it's suspect
                 first = False
 
     def __getitem__(self, item):
         trajectory, i = self.index[item]
-        return self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1], trajectory
+        t, t1 = self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1]
+        if len(t.shape) == 2:
+            # add a channel dimension if grayscale
+            # expected shape is H, W, C
+            t, t1 = t.reshape(*t.shape, 1), t1.reshape(*t1.shape, 1)
+        if self.transforms is not None:
+            t, t1 = self.transforms(t), self.transforms(t1)
+        return t, t1
 
 
 D_CELEBA = 'celeba'
@@ -161,7 +174,7 @@ def get_dataset(data_root, dataset, run_type):
     elif dataset == 'square':
         data = SquareDataset(size=200000, transform=transforms.ToTensor())
     elif dataset == 'pong':
-        data = AtariDataset('Pong-v0', size[run_type], pong_prepro)
+        data = AtariDataset('Pong-v0', size[run_type], pong_prepro, transforms=transforms.ToTensor())
     else:
         raise ConfigException('pick a dataset')
 
