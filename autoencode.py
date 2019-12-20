@@ -12,7 +12,9 @@ import datasets as ds
 import argparse
 from apex import amp
 
-view_in = UniImageViewer('in', screen_resolution=(448, 192))
+scale = 6
+view_in = UniImageViewer('in', screen_resolution=(128 * 2 * scale, 128* scale))
+view_z = UniImageViewer('z', screen_resolution=(256 * scale, 8 * scale))
 
 if __name__ == '__main__':
 
@@ -64,9 +66,9 @@ if __name__ == '__main__':
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit('encoder', args.model_image_channels, 64, encoder_core)
+    encoder = knn.Unit('encoder', args.model_image_channels, 32, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    decoder = knn.Unit('decoder', 64, args.model_image_channels, decoder_core)
+    decoder = knn.Unit('decoder', 32, args.model_image_channels, decoder_core)
 
     auto_encoder = autoencoder.AutoEncoder(args.model_name, encoder, decoder, init_weights=args.reload == 0).to(args.device)
 
@@ -108,6 +110,7 @@ if __name__ == '__main__':
 
             if not i % args.display_freq:
                 view_in.render(torch.cat((x[0], x_[0]), dim=2))
+                view_z.render(torch.cat(z[0].unbind(), dim=1))
 
             if i % args.checkpoint_freq == 0:
                 auto_encoder.save(args.run_id, 'checkpoint')
@@ -126,6 +129,7 @@ if __name__ == '__main__':
                 batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
                 if not i % args.display_freq:
                     view_in.render(torch.cat((x[0], x_[0]), dim=2))
+                    view_z.render(torch.cat(z[0].unbind(), dim=1))
 
         """ check improvement """
         ave_loss = stats.mean(ll)
