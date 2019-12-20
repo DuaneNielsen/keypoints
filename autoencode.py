@@ -62,9 +62,10 @@ if __name__ == '__main__':
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
     """ model """
-    encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type])
+    nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
+    encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     encoder = knn.Unit('encoder', args.model_image_channels, 64, encoder_core)
-    decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
+    decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     decoder = knn.Unit('decoder', 64, args.model_image_channels, decoder_core)
 
     auto_encoder = autoencoder.AutoEncoder(args.model_name, encoder, decoder, init_weights=args.reload == 0).to(args.device)

@@ -14,7 +14,10 @@ model_urls = {
 }
 
 
-def make_layers(cfg, batch_norm=True, extra_in_channels=0):
+def make_layers(cfg, batch_norm=True, extra_in_channels=0,
+                nonlinearity=None,  nonlinearity_kwargs=None):
+    nonlinearity_kwargs = {} if nonlinearity_kwargs is None else nonlinearity_kwargs
+    nonlinearity = nn.ReLU(inplace=True) if nonlinearity is None else nonlinearity(**nonlinearity_kwargs)
     layers = []
     in_channels = cfg[0] + extra_in_channels
     for v in cfg[1:]:
@@ -27,9 +30,9 @@ def make_layers(cfg, batch_norm=True, extra_in_channels=0):
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
             if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
+                layers += [conv2d, nn.BatchNorm2d(v), nonlinearity]
             else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
+                layers += [conv2d, nonlinearity]
             in_channels = v
     return nn.Sequential(*layers)
 
