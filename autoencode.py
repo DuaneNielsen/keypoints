@@ -13,7 +13,7 @@ import argparse
 from apex import amp
 
 scale = 6
-view_in = UniImageViewer('in', screen_resolution=(128 * 2 * scale, 128* scale))
+view_in = UniImageViewer('in', screen_resolution=(128 * 2 * scale, 128 * scale))
 view_z = UniImageViewer('z', screen_resolution=(256 * scale, 8 * scale))
 
 if __name__ == '__main__':
