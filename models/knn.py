@@ -116,10 +116,10 @@ class Unit(nn.Module):
         self.name = name
         core_in_channels, core_out_channels = self._core_channels(core)
 
-        in_block = [nn.Conv2d(in_channels, core_in_channels, kernel_size=3, stride=1, padding=1)]
+        in_block = [nn.ReplicationPad2d(1), nn.Conv2d(in_channels, core_in_channels, kernel_size=3, stride=1)]
         if in_batch_norm:
             in_block += [nn.BatchNorm2d(core_in_channels)]
-        in_block += [nn.ReLU()]
+        in_block += [nn.LeakyReLU(inplace=True)]
         self.in_block = nn.Sequential(*in_block)
 
         self.core = core
@@ -127,7 +127,7 @@ class Unit(nn.Module):
         out_block = [nn.Conv2d(core_out_channels, out_channels, kernel_size=1, stride=1)]
         if out_batch_norm:
             out_block += [nn.BatchNorm2d(out_channels)]
-        out_block += [nn.ReLU()]
+        out_block += [nn.LeakyReLU(inplace=True)]
         self.out_block = nn.Sequential(*out_block)
 
     def forward(self, x):

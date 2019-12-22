@@ -1,6 +1,6 @@
 import torch.nn as nn
 from models.knn import ActivationMap
-
+from math import floor
 
 model_urls = {
     'vgg11': 'https://download.pytorch.org/models/vgg11-bbd30ac9.pth',
@@ -14,8 +14,20 @@ model_urls = {
 }
 
 
+def conv_output_shape(h_w, kernel_size=1, stride=1, pad=0, dilation=1):
+    """
+    Utility function for computing output of convolutions
+    takes a tuple of (h,w) and returns a tuple of (h,w)
+    """
+    if type(kernel_size) is not tuple:
+        kernel_size = (kernel_size, kernel_size)
+    h = floor(((h_w[0] + (2 * pad) - (dilation * (kernel_size[0] - 1)) - 1) / stride) + 1)
+    w = floor(((h_w[1] + (2 * pad) - (dilation * (kernel_size[1] - 1)) - 1) / stride) + 1)
+    return h, w
+
+
 def make_layers(cfg, batch_norm=True, extra_in_channels=0,
-                nonlinearity=None,  nonlinearity_kwargs=None):
+                nonlinearity=None, nonlinearity_kwargs=None):
     nonlinearity_kwargs = {} if nonlinearity_kwargs is None else nonlinearity_kwargs
     nonlinearity = nn.ReLU(inplace=True) if nonlinearity is None else nonlinearity(**nonlinearity_kwargs)
     layers = []
@@ -28,13 +40,14 @@ def make_layers(cfg, batch_norm=True, extra_in_channels=0,
         elif v == 'L':
             layers += [ActivationMap()]
         else:
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
+            conv2d = nn.Conv2d(in_channels, v, kernel_size=3)
             if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nonlinearity]
+                layers += [nn.ReplicationPad2d(1), conv2d, nn.BatchNorm2d(v), nonlinearity]
             else:
-                layers += [conv2d, nonlinearity]
+                layers += [nn.ReplicationPad2d(1), conv2d, nonlinearity]
             in_channels = v
     return nn.Sequential(*layers)
+
 
 """
 M -> MaxPooling
@@ -45,7 +58,8 @@ U -> Bilinear upsample
 decoder_cfg = {
     'A': [512, 512, 'U', 256, 256, 'U', 256, 256, 'U', 128, 'U', 64, 'U'],
     'F': [512, 512, 'U', 256, 256, 'U', 256, 256, 'U', 128, 64],
-    'PONG': [32, 'U', 16, 'U', 4],
+    'VGG_PONG': [32, 'U', 16, 'U', 16],
+    'VGG_PONG_TRIVIAL': [16, 16],
 }
 
 vgg_cfg = {
@@ -54,5 +68,6 @@ vgg_cfg = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
     'E': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M'],
     'F': [64, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512],
-    'PONG': [4, 'M', 16, 'M', 32],
+    'VGG_PONG': [16, 'M', 16, 'M', 32],
+    'VGG_PONG_TRIVIAL': [16, 16],
 }

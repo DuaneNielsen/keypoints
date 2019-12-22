@@ -47,6 +47,29 @@ def resize2D(tensor, size, interpolation=Image.BILINEAR):
     return F.to_tensor(pic).to(tensor.device)
 
 
+def panel_np(numpy_array):
+    test_panel = []
+    for i in range(4):
+        test_panel.append(np.concatenate(numpy_array[i * 5: i * 5 + 5], axis=1))
+    test_panel = np.concatenate(test_panel, axis=0)
+    return test_panel
+
+
+def panel_tensor(tensor):
+    tensor = tensor.clone().cpu()
+    pads = 4 * 5 - tensor.size(0)
+    if pads > 0:
+        shape = pads, *tensor.shape[1:3]
+        pad = torch.ones(shape, device=tensor.device, dtype=tensor.dtype)
+        tensor = torch.cat([tensor, pad], dim=0)
+
+    test_panel = []
+    for i in range(4):
+        test_panel.append(torch.cat(tensor[i * 5: i * 5 + 5].unbind(), dim=1))
+    test_panel = torch.cat(test_panel, dim=0)
+    return test_panel
+
+
 class ResultsLogger(object):
     def __init__(self, model_name, run_id, num_keypoints,
                  comment='', title='title', logfile='keypoints.log',
@@ -73,7 +96,6 @@ class ResultsLogger(object):
         self.kp_rows = kp_rows
         self.debug_view = UniImageViewer()
         self.test_view = UniImageViewer()
-
 
     def header(self, args):
 
@@ -116,10 +138,7 @@ class ResultsLogger(object):
 
             kp_positions += [np.ones(kp_positions[0].shape, dtype=kp_positions[0].dtype) * 254 for _ in range(20 - len(kp_positions))]
 
-            test_panel = []
-            for i in range(4):
-                test_panel.append(np.concatenate(kp_positions[i * 5: i * 5 + 5], axis=1))
-            test_panel = np.concatenate(test_panel, axis=0)
+            test_panel = self.panel(kp_positions)
 
             if self.visuals:
                 self.viewer.render(train_panel)
@@ -133,6 +152,13 @@ class ResultsLogger(object):
                 self.tb.add_image(f'{type}_batch', F.to_tensor(test_panel), global_step=self.step)
 
         self.step += 1
+
+    def panel(self, kp_positions):
+        test_panel = []
+        for i in range(4):
+            test_panel.append(np.concatenate(kp_positions[i * 5: i * 5 + 5], axis=1))
+        test_panel = np.concatenate(test_panel, axis=0)
+        return test_panel
 
     def end_epoch(self, epoch, optim):
 

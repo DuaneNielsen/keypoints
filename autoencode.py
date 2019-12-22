@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from colorama import Fore, Style
 from torch.optim import Adam
@@ -7,14 +8,14 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
 from models import vgg, knn, autoencoder
-from utils import get_lr, UniImageViewer
+from utils import get_lr, UniImageViewer, panel_tensor
 import datasets as ds
 import argparse
 from apex import amp
 
-scale = 6
+scale = 4
 view_in = UniImageViewer('in', screen_resolution=(128 * 2 * scale, 128 * scale))
-view_z = UniImageViewer('z', screen_resolution=(256 * scale, 8 * scale))
+view_z = UniImageViewer('z', screen_resolution=(128//2 * 5 * scale, 128//2 * 4 * scale))
 
 if __name__ == '__main__':
 
@@ -26,7 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default=device)
     parser.add_argument('--run_id', type=int, required=True)
     parser.add_argument('--comment', type=str, default='')
-    parser.add_argument('--train_mode', type=bool, default='True')
+    parser.add_argument('--demo', type=int, default=0)
     parser.add_argument('--reload', type=int, default=0)
     parser.add_argument('--resume', type=int, default=0)
     parser.add_argument('--checkpoint_freq', type=int, default=100)
@@ -40,7 +41,6 @@ if __name__ == '__main__':
     parser.add_argument('--display_kp_rows', type=int, default=5)
 
     """ model parameters """
-    parser.add_argument('--model_name', type=str)
     parser.add_argument('--model_type', type=str)
     parser.add_argument('--model_image_channels', type=int, default=3)
 
@@ -57,6 +57,8 @@ if __name__ == '__main__':
 
     """ variables """
     best_loss = 100.0
+    log_dir = f'data/models/{args.model_type}/run_{args.run_id}'
+    writer = SummaryWriter(log_dir=log_dir)
 
     """ data """
     train, test = ds.get_dataset(args.data_root, args.dataset, args.dataset_size)
@@ -66,14 +68,18 @@ if __name__ == '__main__':
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit('encoder', args.model_image_channels, 32, encoder_core)
+    encoder = knn.Unit('encoder', args.model_image_channels, 16, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    decoder = knn.Unit('decoder', 32, args.model_image_channels, decoder_core)
+    decoder = knn.Unit('decoder', 16, args.model_image_channels, decoder_core)
 
-    auto_encoder = autoencoder.AutoEncoder(args.model_name, encoder, decoder, init_weights=args.reload == 0).to(args.device)
+    auto_encoder = autoencoder.AutoEncoder(args.model_type, encoder, decoder, init_weights=args.reload == 0).to(args.device)
 
     if args.reload != 0:
-        auto_encoder.load(args.reload)
+        auto_encoder.load(args.reload, 'best')
+    if args.demo != 0:
+        auto_encoder.load(args.demo, 'best')
+    if args.resume != 0:
+        auto_encoder.load(args.demo, 'checkpoint')
 
     """ optimizer """
     optim = Adam(auto_encoder.parameters(), lr=args.lr)
@@ -97,7 +103,7 @@ if __name__ == '__main__':
             optim.zero_grad()
             z, x_ = auto_encoder(x)
             loss = criterion(x_, x)
-            if args.train_mode:
+            if args.demo == 0:
                 if args.device != 'cpu':
                     with amp.scale_loss(loss, optim) as scaled_loss:
                         scaled_loss.backward()
@@ -108,13 +114,12 @@ if __name__ == '__main__':
             ll.append(loss.item())
             batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
 
-            if not i % args.display_freq:
+            if i % args.display_freq == 0:
                 view_in.render(torch.cat((x[0], x_[0]), dim=2))
-                view_z.render(torch.cat(z[0].unbind(), dim=1))
+                view_z.render(panel_tensor(z[0]))
 
-            if i % args.checkpoint_freq == 0:
+            if i % args.checkpoint_freq == 0 and args.demo == 0:
                 auto_encoder.save(args.run_id, 'checkpoint')
-
 
         """ test  """
         with torch.no_grad():
@@ -129,7 +134,7 @@ if __name__ == '__main__':
                 batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
                 if not i % args.display_freq:
                     view_in.render(torch.cat((x[0], x_[0]), dim=2))
-                    view_z.render(torch.cat(z[0].unbind(), dim=1))
+                    view_z.render(panel_tensor(z[0]))
 
         """ check improvement """
         ave_loss = stats.mean(ll)
@@ -139,7 +144,7 @@ if __name__ == '__main__':
         print(f'{Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}')
 
         """ save if model improved """
-        if ave_loss <= best_loss and args.train_mode:
+        if ave_loss <= best_loss and args.demo == 0:
             auto_encoder.save(args.run_id, 'best')
 
 
