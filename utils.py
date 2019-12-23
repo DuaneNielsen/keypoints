@@ -321,7 +321,7 @@ def plot_joint(img, x_marginal, y_marginal, k, color):
     ax_marg_side = fig.add_subplot(side)
     ax_marg_side_kp = fig.add_subplot(side)
 
-    ax_joint.imshow(img, cmap='gray', vmin=0, vmax=img.max())
+    ax_joint.imshow(img, cmap='gray', vmin=img.min(), vmax=img.max())
 
     width = x_marginal.shape[0]
     ax_marg_top.bar(np.arange(width), x_marginal, color='#949494')
