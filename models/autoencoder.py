@@ -1,10 +1,10 @@
-from models.knn import Container, Identity
+from models.knn import Container
 
 
 class AutoEncoder(Container):
-    def __init__(self, name, encoder, decoder,
+    def __init__(self, encoder, decoder,
                  init_weights=True):
-        super().__init__(name)
+        super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         if init_weights:
@@ -15,12 +15,12 @@ class AutoEncoder(Container):
         x = self.decoder(z)
         return z, x
 
-    def load(self, run_id, epoch):
-        self.encoder.load(self.name, run_id, epoch)
-        self.decoder.load(self.name, run_id, epoch)
+    def load(self, root_path):
+        self.encoder.load(root_path + '/encoder')
+        self.decoder.load(root_path + '/decoder')
 
-    def save(self, run_id, epoch):
-        self.encoder.save(self.name, run_id, epoch)
-        self.decoder.save(self.name, run_id, epoch)
+    def save(self, root_path):
+        self.encoder.save(root_path + '/encoder')
+        self.decoder.save(root_path + '/decoder')
 
 

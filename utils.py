@@ -71,10 +71,11 @@ def panel_tensor(tensor):
 
 
 class ResultsLogger(object):
-    def __init__(self, model_name, run_id, num_keypoints,
+    def __init__(self, run_dir, num_keypoints,
                  comment='', title='title', logfile='keypoints.log',
                  visuals=True, image_capture_freq=8, kp_rows=4):
         super().__init__()
+        self.run_dir = run_dir
         self.ll = []
         self.scale = 2
         self.viewer = UniImageViewer(title, screen_resolution=(128 * 5 * self.scale, 128 * 4 * self.scale))
@@ -89,9 +90,7 @@ class ResultsLogger(object):
                             level=logging.DEBUG,
                             handlers=[logging.FileHandler(logfile, 'a', 'utf-8')])
         self.step = 0
-        self.name = model_name
-        log_dir = f'data/models/{self.name}/run_{run_id}'
-        self.tb = SummaryWriter(log_dir=log_dir, comment=comment)
+        self.tb = SummaryWriter(log_dir=run_dir, comment=comment)
         self.image_capture_freq = image_capture_freq
         self.kp_rows = kp_rows
         self.debug_view = UniImageViewer()
@@ -116,7 +115,7 @@ class ResultsLogger(object):
         if self.tb:
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
-        if not batch_i % self.image_capture_freq:
+        if batch_i % self.image_capture_freq == 0:
             train_panel = []
             for i in range(4):
                 kp_image = plot_keypoints_on_image(k[i], x_[i])

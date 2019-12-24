@@ -140,6 +140,7 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
                 first = False
 
     def __getitem__(self, item):
+        #todo, add a shuffle table or test and train wont be iid
         trajectory, i = self.index[item]
         t, t1 = self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1]
         if len(t.shape) == 2:

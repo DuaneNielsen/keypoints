@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.optim import SGD, Adam
@@ -8,54 +9,19 @@ from utils import ResultsLogger
 from tps import tps_transform, tps_sample_params, rotate_affine_grid_multi
 from apex import amp
 from datasets import get_dataset
-import argparse
+from config import config
 import models.knn as knn
 
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='keypoint detection demo')
-
-    """ config """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument('--device', type=str, default=device)
-    parser.add_argument('--run_id', type=int, required=True)
-    parser.add_argument('--comment', type=str, default='')
-    parser.add_argument('--run_type', type=str, default='full')
-    parser.add_argument('--train_mode', type=bool, default='True')
-    parser.add_argument('--reload', type=int, default=0)
-    parser.add_argument('--resume', type=int, default=0)
-    parser.add_argument('--checkpoint_freq', type=int, default=100)
-    parser.add_argument('--epochs', type=int, default=800)
-    parser.add_argument('--data_root', type=str, default='data')
-    parser.add_argument('--opt_level', type=str, default='O0')
-
-    """ visualization params"""
-    parser.add_argument('--display', action='store_true')
-    parser.add_argument('--display_freq', type=int, default=10)
-    parser.add_argument('--display_kp_rows', type=int, default=5)
-
-    """ model parameters """
-    parser.add_argument('--model_name', type=str)
-    parser.add_argument('--num_keypoints', type=int, default=10)
-
-    """ hyper-parameters """
-    parser.add_argument('--optimizer', type=str, default='Adam')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--lr', type=float, default=0.01)
-
-    """ data and data augmentation parameters """
-    parser.add_argument('--dataset', type=str, default='square')
-    parser.add_argument('--tps_cntl_pts', type=int, default=4)
-    parser.add_argument('--tps_variance', type=float, default=0.05)
-    parser.add_argument('--max_rotate', type=float, default=0.1)
-
-    args = parser.parse_args()
+    args = config()
+    torch.cuda.set_device(args.device)
+    run_dir = f'data/models/{args.tag}/keypoints/{args.model_type}/run_{args.run_id}'
 
     """ logging """
-    display = ResultsLogger(model_name=args.model_name,
-                            run_id=args.run_id,
-                            num_keypoints=args.num_keypoints,
+    display = ResultsLogger(run_dir=run_dir,
+                            num_keypoints=args.model_keypoints,
                             title='Results',
                             visuals=args.display,
                             image_capture_freq=args.display_freq,
@@ -64,7 +30,7 @@ if __name__ == '__main__':
     display.header(args)
 
     """ dataset """
-    train, test = get_dataset(args.data_root, args.dataset, args.run_type)
+    train, test = get_dataset(args.data_root, args.dataset, args.dataset_size)
     pin_memory = False if args.device == 'cpu' else True
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
@@ -83,7 +49,7 @@ if __name__ == '__main__':
         x = rotate_affine_grid_multi(x, theta_rotate)
         return x
 
-    def tps_and_rotate(data):
+    def tps_and_rotate(*data):
         x = data[0]
         loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
         bsize = x.size(0)
@@ -99,35 +65,29 @@ if __name__ == '__main__':
     def nop(*data):
         return data[0], data[1], None
 
+    if args.data_aug_type == 'tps_and_rotate':
+        augment = tps_and_rotate
+    else:
+        augment = nop
+
     """ model """
-    def make_small_vgg():
-        encoder_core = vgg.make_layers(vgg.vgg_cfg['F'])
-        encoder = knn.Unit('encoder', 3, 64, encoder_core, out_batch_norm=False)
-        decoder_core = vgg.make_layers(vgg.decoder_cfg['F'])
-        decoder = knn.Unit('decoder', 64 + args.num_keypoints, 3, decoder_core)
-        keypoint_core = vgg.make_layers(vgg.vgg_cfg['F'])
-        keypoint = knn.Unit('keypoint', 3, args.num_keypoints, keypoint_core, out_batch_norm=False)
-        keymapper = knn.GaussianLike(sigma=0.1)
-        return keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder)
-
-    def make_tiny_vgg(input_channels=1):
-        encoder_core = vgg.make_layers(vgg.vgg_cfg['PONG'])
-        encoder = knn.Unit('encoder', input_channels, 64, encoder_core, out_batch_norm=False)
-        decoder_core = vgg.make_layers(vgg.decoder_cfg['PONG'])
-        decoder = knn.Unit('decoder', 64 + args.num_keypoints, input_channels, decoder_core)
-        keypoint_core = vgg.make_layers(vgg.vgg_cfg['PONG'])
-        keypoint = knn.Unit('keypoint', input_channels, args.num_keypoints, keypoint_core, out_batch_norm=False)
-        keymapper = knn.GaussianLike(sigma=0.1)
-        return keynet.KeyNet(args.model_name, encoder, keypoint, keymapper, decoder)
-
-    kp_network = make_tiny_vgg()
+    nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
+    encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
+    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core,
+                       out_batch_norm=args.model_out_batch_norm)
+    decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
+    decoder = knn.Unit(args.model_z_channels + args.model_keypoints, args.model_in_channels, decoder_core)
+    keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
+    keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core,
+                        out_batch_norm=args.model_out_batch_norm)
+    keymapper = knn.GaussianLike(sigma=0.1)
+    kp_network = keynet.KeyNet(encoder, keypoint, keymapper, decoder, init_weights=True)
     kp_network = kp_network.to(args.device)
 
-    if args.resume != 0:
-        kp_network.load(args.resume, 'checkpoint')
-
-    if args.reload != 0:
-        kp_network.load(args.reload, 'best')
+    if args.load is not None:
+        kp_network.load(args.load)
+    if args.transfer_load is not None:
+        kp_network.load_from_autoencoder(args.transfer_load)
 
     """ optimizer """
     if args.optimizer == 'Adam':
@@ -149,25 +109,24 @@ if __name__ == '__main__':
         return torch.mean(loss)
 
     criterion = l2_reconstruction_loss
-    augment = nop
 
     def to_device(data, device):
         return tuple([x.to(device) for x in data])
 
     for epoch in range(1, args.epochs + 1):
 
-        """ training """
-        batch = tqdm(train_l, total=len(train) // args.batch_size)
-        for i, data in enumerate(batch):
-            data = to_device(data, device=args.device)
-            x, x_, loss_mask = augment(*data)
+        if not args.demo:
+            """ training """
+            batch = tqdm(train_l, total=len(train) // args.batch_size)
+            for i, data in enumerate(batch):
+                data = to_device(data, device=args.device)
+                x, x_, loss_mask = augment(*data)
 
-            optim.zero_grad()
-            x_t, z, k, m, p, heatmap = kp_network(x, x_)
+                optim.zero_grad()
+                x_t, z, k, m, p, heatmap = kp_network(x, x_)
 
-            loss = criterion(x_t, x_, loss_mask)
+                loss = criterion(x_t, x_, loss_mask)
 
-            if args.train_mode:
                 if args.device != 'cpu':
                     with amp.scale_loss(loss, optim) as scaled_loss:
                         scaled_loss.backward()
@@ -175,10 +134,10 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
-            if i % args.checkpoint_freq == 0:
-                kp_network.save(args.run_id, 'checkpoint')
+                if i % args.checkpoint_freq == 0:
+                    kp_network.save(run_dir + '/checkpoint')
 
-            display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Train', depth=20)
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Train', depth=20)
 
         """ test  """
         with torch.no_grad():
@@ -196,5 +155,5 @@ if __name__ == '__main__':
             scheduler.step(ave_loss)
 
             """ save if model improved """
-            if ave_loss <= best_loss and args.train_mode:
-                kp_network.save(args.run_id, 'best')
+            if ave_loss <= best_loss and not args.demo:
+                kp_network.save(run_dir + '/best')

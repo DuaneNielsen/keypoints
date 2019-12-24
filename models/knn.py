@@ -6,9 +6,8 @@ from models.functional import gaussian_like_function, spacial_softmax
 
 
 class Container(nn.Module):
-    def __init__(self, name):
+    def __init__(self):
         super().__init__()
-        self.name = name
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -23,22 +22,13 @@ class Container(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
 
-    def _save_block(self, block, run_id, blockname):
-        path = Path(f'data/models/{self.name}/run_{run_id}/{blockname}.mdl')
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(block.state_dict(), str(path))
-
-    def _load_block(self, block, run_id, blockname):
-        path = Path(f'data/models/{self.name}/run_{run_id}/{blockname}.mdl')
-        block.load_state_dict(torch.load(str(path)))
-
     def forward(self, *input):
         raise NotImplementedError()
 
-    def save(self, run_id, epoch):
+    def save(self, directory):
         raise NotImplementedError()
 
-    def load(self, run_id, epoch):
+    def load(self, directory):
         raise NotImplementedError()
 
 
@@ -111,9 +101,8 @@ class SpatialSoftmax(torch.nn.Module):
 
 
 class Unit(nn.Module):
-    def __init__(self, name, in_channels, out_channels, core, in_batch_norm=True, out_batch_norm=True):
+    def __init__(self, in_channels, out_channels, core, in_batch_norm=True, out_batch_norm=True):
         super().__init__()
-        self.name = name
         core_in_channels, core_out_channels = self._core_channels(core)
 
         in_block = [nn.ReplicationPad2d(1), nn.Conv2d(in_channels, core_in_channels, kernel_size=3, stride=1)]
@@ -146,24 +135,27 @@ class Unit(nn.Module):
                 last = m
         return first.in_channels, last.out_channels
 
-    def _save_block(self, model_name, run_id, epoch, unit, block):
-        path = Path(f'data/models/{model_name}/run_{run_id}/{epoch}/{self.name}/{unit}.mdl')
+    def _save_block(self, directory, unit, block):
+        path = Path(f'{directory}/{unit}.mdl')
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(block.state_dict(), str(path))
 
-    def _load_block(self, model_name, run_id, epoch, unit, block):
-        path = Path(f'data/models/{model_name}/run_{run_id}/{epoch}/{self.name}/{unit}.mdl')
+    def _load_block(self, directory, unit, block):
+        path = Path(f'{directory}/{unit}.mdl')
         block.load_state_dict(torch.load(str(path)))
 
-    def save(self, model_name, run_id, epoch):
-        self._save_block(model_name, run_id, epoch, 'in_block', self.in_block)
-        self._save_block(model_name, run_id, epoch, 'core', self.core)
-        self._save_block(model_name, run_id, epoch, 'out_block', self.out_block)
+    def save(self, directory):
+        self._save_block(directory, 'in_block', self.in_block)
+        self._save_block(directory, 'core', self.core)
+        self._save_block(directory, 'out_block', self.out_block)
 
-    def load(self, model_name, run_id, epoch):
-        self._load_block(model_name, run_id, epoch, 'in_block', self.in_block)
-        self._load_block(model_name, run_id, epoch, 'core', self.core)
-        self._load_block(model_name, run_id, epoch, 'out_block', self.out_block)
+    def load(self, directory, in_block=True, core=True, out_block=True):
+        if in_block:
+            self._load_block(directory, 'in_block', self.in_block)
+        if core:
+            self._load_block(directory, 'core', self.core)
+        if out_block:
+            self._load_block(directory, 'out_block', self.out_block)
 
 
 class FeatureBlock(nn.Module):
@@ -190,3 +182,15 @@ class OutputBlock(nn.Module):
 
     def forward(self, x):
         return self.output_block(x)
+
+
+class Coords(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        """ adds 2 channels that carry co-ordinate information """
+        b, h, w = x.size(0), x.size(2), x.size(3)
+        hm = torch.linspace(0, 1, h, dtype=x.dtype, device=x.device).reshape(1, 1, h, 1).repeat(b, 1, 1, w)
+        wm = torch.linspace(0, 1, w, dtype=x.dtype, device=x.device).reshape(1, 1, 1, w).repeat(b, 1, h, 1)
+        return torch.cat((x, hm, wm), dim=1)

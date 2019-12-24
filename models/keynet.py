@@ -3,11 +3,11 @@ from models import knn
 
 
 class KeyNet(knn.Container):
-    def __init__(self, name, encoder,
+    def __init__(self, encoder,
                  keypoint, key2map,
                  decoder,
                  init_weights=True):
-        super().__init__(name)
+        super().__init__()
         self.encoder = encoder
         self.keypoint = keypoint
         self.ssm = knn.SpatialSoftmax()
@@ -29,13 +29,19 @@ class KeyNet(knn.Container):
 
         return x_t, z, k, m, p, heatmap
 
-    def load(self, run_id, epoch):
-        self.encoder.load(self.name, run_id, epoch)
-        self.keypoint.load(self.name, run_id, epoch)
-        self.decoder.load(self.name, run_id, epoch)
+    def load(self, directory):
+        self.encoder.load(directory + '/encoder')
+        self.keypoint.load(directory + '/keypoint')
+        self.decoder.load(directory + '/decoder')
 
-    def save(self, run_id, epoch):
-        self.encoder.save(self.name, run_id, epoch)
-        self.keypoint.save(self.name, run_id, epoch)
-        self.decoder.save(self.name, run_id, epoch)
+    def load_from_autoencoder(self, directory):
+        self._initialize_weights()
+        self.encoder.load(directory + '/encoder', out_block=False)
+        self.keypoint.load(directory + '/encoder', in_block=True, core=True, out_block=False)
+        self.decoder.load(directory + '/decoder', in_block=False, core=True, out_block=True)
+
+    def save(self, directory):
+        self.encoder.save(directory + '/encoder')
+        self.keypoint.save(directory + '/keypoint')
+        self.decoder.save(directory + '/decoder')
 

@@ -7,3 +7,4 @@ numpy
 pytest
 matplotlib
 gym[atari]
+pyyaml

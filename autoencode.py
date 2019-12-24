@@ -10,76 +10,64 @@ import statistics as stats
 from models import vgg, knn, autoencoder
 from utils import get_lr, UniImageViewer, panel_tensor
 import datasets as ds
-import argparse
 from apex import amp
+from config import config
 
 scale = 4
 view_in = UniImageViewer('in', screen_resolution=(128 * 2 * scale, 128 * scale))
 view_z = UniImageViewer('z', screen_resolution=(128//2 * 5 * scale, 128//2 * 4 * scale))
 
+
+def log(phase):
+    writer.add_scalar(f'{phase}_loss', loss.item(), global_step)
+
+    if i % args.display_freq == 0:
+        recon = torch.cat((x[0], x_[0]), dim=2)
+        latent = panel_tensor(z[0])
+        if args.display:
+            view_in.render(recon)
+            view_z.render(latent)
+        writer.add_image(f'{phase}_recon', recon, global_step)
+        writer.add_image(f'{phase}_latent', latent.unsqueeze(0), global_step)
+
+
 if __name__ == '__main__':
 
-    """ config """
-    parser = argparse.ArgumentParser(description='autoencoder for pre-training')
-
-    """ config """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    parser.add_argument('--device', type=str, default=device)
-    parser.add_argument('--run_id', type=int, required=True)
-    parser.add_argument('--comment', type=str, default='')
-    parser.add_argument('--demo', type=int, default=0)
-    parser.add_argument('--reload', type=int, default=0)
-    parser.add_argument('--resume', type=int, default=0)
-    parser.add_argument('--checkpoint_freq', type=int, default=100)
-    parser.add_argument('--epochs', type=int, default=800)
-    parser.add_argument('--data_root', type=str, default='data')
-    parser.add_argument('--opt_level', type=str, default='O0')
-
-    """ visualization params"""
-    parser.add_argument('--display', action='store_true')
-    parser.add_argument('--display_freq', type=int, default=10)
-    parser.add_argument('--display_kp_rows', type=int, default=5)
-
-    """ model parameters """
-    parser.add_argument('--model_type', type=str)
-    parser.add_argument('--model_image_channels', type=int, default=3)
-
-    """ hyper-parameters """
-    parser.add_argument('--optimizer', type=str, default='Adam')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--lr', type=float, default=1e-4)
-
-    """ data and data augmentation parameters """
-    parser.add_argument('--dataset', type=str, default='square')
-    parser.add_argument('--dataset_size', type=str, default='full')
-
-    args = parser.parse_args()
+    args = config()
+    torch.cuda.set_device(args.device)
 
     """ variables """
     best_loss = 100.0
-    log_dir = f'data/models/{args.model_type}/run_{args.run_id}'
-    writer = SummaryWriter(log_dir=log_dir)
+    run_dir = f'data/models/{args.tag}/autoencode/{args.model_type}/run_{args.run_id}'
+    writer = SummaryWriter(log_dir=run_dir)
+    global_step = 0
 
     """ data """
     train, test = ds.get_dataset(args.data_root, args.dataset, args.dataset_size)
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
+
+    def add_co_ords_channels(x):
+        """ adds 2 channels that carry co-ordinate information """
+        b, h, w = x.size(0), x.size(2), x.size(3)
+        hm = torch.linspace(0, 1, h, dtype=x.dtype, device=x.device).reshape(1, 1, h, 1).repeat(b, 1, 1, w)
+        wm = torch.linspace(0, 1, w, dtype=x.dtype, device=x.device).reshape(1, 1, 1, w).repeat(b, 1, h, 1)
+        return torch.cat((x, hm, wm), dim=1)
+
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit('encoder', args.model_image_channels, 16, encoder_core)
+    encoder = knn.Unit(args.model_image_channels, args.model_z_channels, encoder_core,
+                       out_batch_norm=args.model_out_batch_norm)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    decoder = knn.Unit('decoder', 16, args.model_image_channels, decoder_core)
+    decoder = knn.Unit(args.model_z_channels, args.model_image_channels, decoder_core,
+                       out_batch_norm=args.model_out_batch_norm)
 
-    auto_encoder = autoencoder.AutoEncoder(args.model_type, encoder, decoder, init_weights=args.reload == 0).to(args.device)
+    auto_encoder = autoencoder.AutoEncoder(encoder, decoder, init_weights=args.load is None).to(args.device)
 
-    if args.reload != 0:
-        auto_encoder.load(args.reload, 'best')
-    if args.demo != 0:
-        auto_encoder.load(args.demo, 'best')
-    if args.resume != 0:
-        auto_encoder.load(args.demo, 'checkpoint')
+    if args.load is not None:
+        auto_encoder.load(args.load)
 
     """ optimizer """
     optim = Adam(auto_encoder.parameters(), lr=args.lr)
@@ -95,15 +83,15 @@ if __name__ == '__main__':
     for epoch in range(1, args.epochs + 1):
 
         """ training """
-        ll = []
         batch = tqdm(train_l, total=len(train) // args.batch_size)
         for i, (x, _) in enumerate(batch):
             x = x.to(args.device)
+            #x = add_co_ords_channels(x)
 
             optim.zero_grad()
             z, x_ = auto_encoder(x)
             loss = criterion(x_, x)
-            if args.demo == 0:
+            if not args.demo:
                 if args.device != 'cpu':
                     with amp.scale_loss(loss, optim) as scaled_loss:
                         scaled_loss.backward()
@@ -111,30 +99,30 @@ if __name__ == '__main__':
                     loss.backward()
                 optim.step()
 
-            ll.append(loss.item())
-            batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {stats.mean(ll)}')
+            batch.set_description(f'Epoch: {epoch} LR: {get_lr(optim)} Train Loss: {loss.item()}')
 
-            if i % args.display_freq == 0:
-                view_in.render(torch.cat((x[0], x_[0]), dim=2))
-                view_z.render(panel_tensor(z[0]))
+            log('train')
 
             if i % args.checkpoint_freq == 0 and args.demo == 0:
-                auto_encoder.save(args.run_id, 'checkpoint')
+                auto_encoder.save(run_dir + '/checkpoint')
+
+            global_step += 1
 
         """ test  """
         with torch.no_grad():
-            batch = tqdm(test_l, total=len(test) // args.batch_size)
             ll = []
+            batch = tqdm(test_l, total=len(test) // args.batch_size)
             for i, (x, _) in enumerate(batch):
                 x = x.to(args.device)
 
                 z, x_ = auto_encoder(x)
                 loss = criterion(x_, x)
-                ll.append(loss.detach().item())
-                batch.set_description(f'Epoch: {epoch} Test Loss: {stats.mean(ll)}')
-                if not i % args.display_freq:
-                    view_in.render(torch.cat((x[0], x_[0]), dim=2))
-                    view_z.render(panel_tensor(z[0]))
+
+                batch.set_description(f'Epoch: {epoch} Test Loss: {loss.item()}')
+                ll.append(loss.item())
+                log('test')
+
+                global_step += 1
 
         """ check improvement """
         ave_loss = stats.mean(ll)
@@ -144,7 +132,7 @@ if __name__ == '__main__':
         print(f'{Fore.CYAN}ave loss: {ave_loss} {Fore.LIGHTBLUE_EX}best loss: {best_loss} {Style.RESET_ALL}')
 
         """ save if model improved """
-        if ave_loss <= best_loss and args.demo == 0:
-            auto_encoder.save(args.run_id, 'best')
+        if ave_loss <= best_loss and not args.demo:
+            auto_encoder.save(run_dir + '/best')
 
 
