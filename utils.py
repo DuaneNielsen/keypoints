@@ -1,11 +1,12 @@
 import matplotlib.figure
 import torch
+import torch.nn.functional as F
 import cv2
 import numpy as np
 from PIL import Image
 import statistics as stats
 import torchvision.transforms as transforms
-import torchvision.transforms.functional as F
+import torchvision.transforms.functional as TVF
 import math
 
 from colorama import Fore, Style
@@ -42,9 +43,9 @@ def color_map():
 
 
 def resize2D(tensor, size, interpolation=Image.BILINEAR):
-    pic = F.to_pil_image(tensor.cpu())
-    pic = F.resize(pic, size, interpolation)
-    return F.to_tensor(pic).to(tensor.device)
+    pic = TVF.to_pil_image(tensor.cpu())
+    pic = TVF.resize(pic, size, interpolation)
+    return TVF.to_tensor(pic).to(tensor.device)
 
 
 def panel_np(numpy_array):
@@ -55,22 +56,33 @@ def panel_np(numpy_array):
     return test_panel
 
 
-def panel_tensor(tensor):
-    tensor = tensor.clone().cpu()
-    pads = 4 * 5 - tensor.size(0)
-    if pads > 0:
-        shape = pads, *tensor.shape[1:3]
-        pad = torch.ones(shape, device=tensor.device, dtype=tensor.dtype)
-        tensor = torch.cat([tensor, pad], dim=0)
+def make_grid(tensor, rows, columns):
+    """
+    Makes a grid from a B, C, H, W tensor
+    Far superior to the torchvision version, coz it's vectorized
 
-    test_panel = []
-    for i in range(4):
-        test_panel.append(torch.cat(tensor[i * 5: i * 5 + 5].unbind(), dim=1))
-    test_panel = torch.cat(test_panel, dim=0)
-    return test_panel
+    If B > rows * columns, it will truncate for you.
+    truncate using an index tensor before you pass in if you want specific images
+    in specific slots
+
+    :param tensor:
+    :param rows:
+    :param columns:
+    :return:
+    """
+    b, c, h, w = tensor.shape
+    b = min(rows * columns, b)
+    grid = torch.ones(b, c, h, w, device=tensor.device, dtype=tensor.dtype)
+    index = torch.arange(b, device=tensor.device)
+    grid[index] = tensor[index]
+    grid = grid.reshape(1, c, b * h, w)
+    grid = F.unfold(grid, kernel_size=(h, w), stride=(h, w))
+    grid = F.fold(grid, output_size=(rows * h, columns * w), kernel_size=(h, w), stride=(h, w))
+    return grid
 
 
 class ResultsLogger(object):
+    """  This thing is a wild hack, no apologies here, if you hate it, rewrite it """
     def __init__(self, run_dir, num_keypoints,
                  comment='', title='title', logfile='keypoints.log',
                  visuals=True, image_capture_freq=8, kp_rows=4):
@@ -120,10 +132,10 @@ class ResultsLogger(object):
             for i in range(4):
                 kp_image = plot_keypoints_on_image(k[i], x_[i])
                 if loss_mask is not None:
-                    train_panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], F.to_tensor(kp_image).to(x.device)], dim=2))
+                    train_panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], TVF.to_tensor(kp_image).to(x.device)], dim=2))
                 else:
                     train_panel.append(
-                        torch.cat([x[i], x_[i], x_t[i], F.to_tensor(kp_image).to(x.device)], dim=2))
+                        torch.cat([x[i], x_[i], x_t[i], TVF.to_tensor(kp_image).to(x.device)], dim=2))
             train_panel = torch.cat(train_panel, dim=1)
 
             bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
@@ -133,7 +145,7 @@ class ResultsLogger(object):
             for i, (k_i, x_i) in enumerate(zip(k.unbind(0), x_.unbind(0))):
                 if i >= 20:
                     break
-                kp_positions.append(plot_keypoints_on_image(k_i, x_i))
+                kp_positions.append(plot_keypoints_on_image(k_i, x_i, radius=2, thickness=2))
 
             kp_positions += [np.ones(kp_positions[0].shape, dtype=kp_positions[0].dtype) * 254 for _ in range(20 - len(kp_positions))]
 
@@ -147,8 +159,8 @@ class ResultsLogger(object):
                 scale = 2
                 train_panel = resize2D(train_panel, (train_panel.size(1) * scale, train_panel.size(2) * scale))
                 self.tb.add_image(f'{type}_in_out', train_panel, global_step=self.step)
-                self.tb.add_image(f'{type}_bottleneck', F.to_tensor(bottleneck_image), global_step=self.step)
-                self.tb.add_image(f'{type}_batch', F.to_tensor(test_panel), global_step=self.step)
+                self.tb.add_image(f'{type}_bottleneck', TVF.to_tensor(bottleneck_image), global_step=self.step)
+                self.tb.add_image(f'{type}_batch', TVF.to_tensor(test_panel), global_step=self.step)
 
         self.step += 1
 

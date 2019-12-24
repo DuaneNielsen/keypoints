@@ -30,7 +30,8 @@ if __name__ == '__main__':
     display.header(args)
 
     """ dataset """
-    train, test = get_dataset(args.data_root, args.dataset, args.dataset_size)
+    train, test = get_dataset(args.data_root, args.dataset,
+                              args.dataset_train_len, args.dataset_test_len, args.dataset_randomize)
     pin_memory = False if args.device == 'cpu' else True
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
@@ -73,13 +74,11 @@ if __name__ == '__main__':
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core,
-                       out_batch_norm=args.model_out_batch_norm)
+    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
     decoder = knn.Unit(args.model_z_channels + args.model_keypoints, args.model_in_channels, decoder_core)
     keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core,
-                        out_batch_norm=args.model_out_batch_norm)
+    keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core)
     keymapper = knn.GaussianLike(sigma=0.1)
     kp_network = keynet.KeyNet(encoder, keypoint, keymapper, decoder, init_weights=True)
     kp_network = kp_network.to(args.device)

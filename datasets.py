@@ -156,14 +156,11 @@ D_CELEBA = 'celeba'
 D_SQUARE = 'square'
 D_PONG = 'pong'
 
-SIZE_FULL = 'full'
-SIZE_SMALL = 'small'
-SIZE_SHORT = 'short'
-SIZE_TINY = 'tiny'
 
+def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
 
-def get_dataset(data_root, dataset, run_type):
-    size = {'full': 200000, 'small': 11001, 'short': 2501, 'tiny': 32 * 3 + 1 + 32 * 2}
+    total_len = train_len + test_len
+
     if dataset == 'celeba':
         path = Path(data_root + '/celeba-low')
         """ celeba a transforms """
@@ -175,23 +172,17 @@ def get_dataset(data_root, dataset, run_type):
     elif dataset == 'square':
         data = SquareDataset(size=200000, transform=transforms.ToTensor())
     elif dataset == 'pong':
-        data = AtariDataset('Pong-v0', size[run_type], pong_prepro, transforms=transforms.ToTensor())
+        data = AtariDataset('Pong-v0', total_len, pong_prepro, transforms=transforms.ToTensor())
     else:
         raise ConfigException('pick a dataset')
 
-    if run_type == 'full':
-        train = torch.utils.data.Subset(data, range(190000))
-        test = torch.utils.data.Subset(data, range(190001, len(data)))
-    elif run_type == 'small':
-        train = torch.utils.data.Subset(data, range(10000))
-        test = torch.utils.data.Subset(data, range(10001, 11001))
-    elif run_type == 'short':
-        train = torch.utils.data.Subset(data, range(2000))
-        test = torch.utils.data.Subset(data, range(2001, 2501))
-    elif run_type == 'tiny':
-        train = torch.utils.data.Subset(data, range(32 * 3))
-        test = torch.utils.data.Subset(data, range(32 * 3 + 1, 32 * 3 + 1 + 32 * 2))
+    if total_len > len(data):
+        raise ConfigException(f'total length in config is {total_len} but dataset has only {len(data)} entries')
+
+    if randomize:
+        train, test = torch.utils.data.random_split(dataset, (train_len, test_len))
     else:
-        raise ConfigException('pick a run type')
+        train = torch.utils.data.Subset(data, range(0, train_len))
+        test = torch.utils.data.Subset(data, range(train_len, total_len))
 
     return train, test

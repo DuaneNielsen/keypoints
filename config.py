@@ -43,7 +43,9 @@ def config():
 
     """ data and data augmentation parameters """
     parser.add_argument('--dataset', type=str, default='square')
-    parser.add_argument('--dataset_size', type=str, default='full')
+    parser.add_argument('--dataset_train_len', type=int, default=None)
+    parser.add_argument('--dataset_test_len', type=int, default=None)
+    parser.add_argument('--dataset_randomize', type=int, default=None)
 
     parser.add_argument('--tps_cntl_pts', type=int, default=4)
     parser.add_argument('--tps_variance', type=float, default=0.05)

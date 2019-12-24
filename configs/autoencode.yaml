@@ -1,11 +1,14 @@
 checkpoint_freq: 1000
-display_freq: 1000
+display_freq: 1
 model_type: F
 model_in_channels: 3
 model_z_channels : 64
 model_out_batch_norm : False
 dataset: celeba
-dataset_size: full
+dataset_train_len: 190000
+dataset_test_len: 1100
+dataset_randomize: False
+
 
 batch_size: 30
 epochs: 24

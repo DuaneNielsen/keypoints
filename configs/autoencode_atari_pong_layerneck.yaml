@@ -1,1 +1,12 @@
-epochs: 1000
+checkpoint_freq: 1000
+display_freq: 1000
+model_type: F
+model_in_channels: 3
+model_z_channels : 64
+model_out_batch_norm : False
+dataset: pong
+dataset_size: full
+
+batch_size: 30
+epochs: 24
+opt_level: O2

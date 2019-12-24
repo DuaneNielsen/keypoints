@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
 from models import vgg, knn, autoencoder
-from utils import get_lr, UniImageViewer, panel_tensor
+from utils import get_lr, UniImageViewer, make_grid
 import datasets as ds
 from apex import amp
 from config import config
@@ -23,12 +23,12 @@ def log(phase):
 
     if i % args.display_freq == 0:
         recon = torch.cat((x[0], x_[0]), dim=2)
-        latent = panel_tensor(z[0])
+        latent = make_grid(z[0].unsqueeze(1), 4, 4)
         if args.display:
             view_in.render(recon)
             view_z.render(latent)
         writer.add_image(f'{phase}_recon', recon, global_step)
-        writer.add_image(f'{phase}_latent', latent.unsqueeze(0), global_step)
+        writer.add_image(f'{phase}_latent', latent.squeeze(0), global_step)
 
 
 if __name__ == '__main__':
@@ -43,7 +43,8 @@ if __name__ == '__main__':
     global_step = 0
 
     """ data """
-    train, test = ds.get_dataset(args.data_root, args.dataset, args.dataset_size)
+    train, test = ds.get_dataset(args.data_root, args.dataset, args.dataset_train_len, args.dataset_test_len,
+                                 args.dataset_randomize)
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
@@ -58,11 +59,9 @@ if __name__ == '__main__':
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit(args.model_image_channels, args.model_z_channels, encoder_core,
-                       out_batch_norm=args.model_out_batch_norm)
+    encoder = knn.Unit(args.model_image_channels, args.model_z_channels, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    decoder = knn.Unit(args.model_z_channels, args.model_image_channels, decoder_core,
-                       out_batch_norm=args.model_out_batch_norm)
+    decoder = knn.Unit(args.model_z_channels, args.model_image_channels, decoder_core)
 
     auto_encoder = autoencoder.AutoEncoder(encoder, decoder, init_weights=args.load is None).to(args.device)
 
