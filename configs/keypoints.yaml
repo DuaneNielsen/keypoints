@@ -3,7 +3,6 @@ checkpoint_freq: 1000
 model_type: F
 model_in_channels: 3
 model_z_channels : 64
-model_out_batch_norm : False
 model_keypoints : 10
 
 dataset: celeba
