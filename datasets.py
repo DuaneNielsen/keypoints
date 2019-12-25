@@ -13,6 +13,7 @@ from torchvision import transforms
 import gym
 import skimage.measure
 from tqdm import tqdm
+from random import randint
 
 Pos = collections.namedtuple('Pos', 'x, y')
 
@@ -93,9 +94,10 @@ def if_done_or_nonzero_reward(done, r):
 
 
 class AtariDataset(torch.utils.data.dataset.Dataset):
-    def __init__(self, env, size, prepro, transforms=None, end_trajectory=if_done, skip_first=False):
+    def __init__(self, env, size, prepro, max_frame_skip=20, min_frame_skip=5, transforms=None,
+                 end_trajectory=if_done, skip_first=False):
         super().__init__()
-        self.loadbar = tqdm(total=size, desc='LOADING TRAJECTORIES FROM SIMULATOR')
+        self.loadbar = tqdm(total=size, desc='Loading trajectories from sim')
         self.prepro = prepro
         self.end_trajectory = end_trajectory
         self.env = gym.make(env)
@@ -103,9 +105,11 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
         self.trajectories = []
         self.index = []
         self.skip_first = skip_first
-        self._fill(size)
+        self.max_frame_skip = max_frame_skip
+        self.min_frame_skip = min_frame_skip
         self.transforms = transforms
 
+        self._fill(size)
 
     def _trajectory(self, reset):
         frames = []
@@ -134,7 +138,7 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
             if not first:
                 self.trajectories.append(t)
                 first = done
-                for i in range(t.shape[0] - 1):
+                for i in range(t.shape[0] - self.max_frame_skip):
                     self.index.append((traj_id, i))
                 traj_id += 1
                 self.loadbar.update(t.shape[0])
@@ -143,9 +147,9 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
                 first = False
 
     def __getitem__(self, item):
-        #todo, add a shuffle table or test and train wont be iid
         trajectory, i = self.index[item]
-        t, t1 = self.trajectories[trajectory][i], self.trajectories[trajectory][i + 1]
+        frame_skip = randint(self.min_frame_skip, self.max_frame_skip)
+        t, t1 = self.trajectories[trajectory][i], self.trajectories[trajectory][i + frame_skip]
         if len(t.shape) == 2:
             # add a channel dimension if grayscale
             # expected shape is H, W, C
@@ -191,7 +195,9 @@ def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
     elif dataset == 'square':
         data = SquareDataset(size=200000, transform=transforms.ToTensor())
     elif dataset == 'pong':
-        data = AtariDataset('Pong-v0', total_len, pong_prepro, transforms=transforms.ToTensor())
+        data = AtariDataset('Pong-v0', total_len, pong_prepro,
+                            end_trajectory=if_done_or_nonzero_reward,
+                            transforms=transforms.ToTensor())
     else:
         raise ConfigException('pick a dataset')
 

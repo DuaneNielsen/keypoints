@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.optim import SGD, Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim import Adam
+
+from data_augments import TpsAndRotate, nop
 from models import vgg, keynet
 from utils import ResultsLogger
-from tps import tps_transform, tps_sample_params, rotate_affine_grid_multi
 from apex import amp
 from datasets import get_dataset
 from config import config
@@ -37,37 +37,8 @@ if __name__ == '__main__':
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
 
     """ data augmentation """
-
-    def rand_peturb_params(batch_items):
-        theta_tps, cntl_pts = tps_sample_params(batch_items, args.tps_cntl_pts, args.tps_variance)
-        theta_rotate = torch.rand(batch_items) * 2 - 1
-        theta_rotate = theta_rotate * args.max_rotate
-        return theta_tps, cntl_pts, theta_rotate
-
-
-    def peturb(x, tps_theta, cntl_pts, theta_rotate):
-        x = tps_transform(x, tps_theta, cntl_pts)
-        x = rotate_affine_grid_multi(x, theta_rotate)
-        return x
-
-    def tps_and_rotate(*data):
-        x = data[0]
-        loss_mask = torch.ones(x.shape, dtype=x.dtype, device=x.device)
-        bsize = x.size(0)
-        theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
-        x = peturb(x, theta_tps, cntl_pts, theta_rotate)
-        loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
-
-        theta_tps, cntl_pts, theta_rotate = rand_peturb_params(bsize)
-        x_ = peturb(x, theta_tps, cntl_pts, theta_rotate)
-        loss_mask = peturb(loss_mask, theta_tps, cntl_pts, theta_rotate)
-        return x, x_, loss_mask
-
-    def nop(*data):
-        return data[0], data[1], None
-
     if args.data_aug_type == 'tps_and_rotate':
-        augment = tps_and_rotate
+        augment = TpsAndRotate(args.data_aug_tps_cntl_pts, args.data_aug_tps_variance, args.data_aug_max_rotate)
     else:
         augment = nop
 
@@ -89,12 +60,7 @@ if __name__ == '__main__':
         kp_network.load_from_autoencoder(args.transfer_load)
 
     """ optimizer """
-    if args.optimizer == 'Adam':
-        optim = Adam(kp_network.parameters(), lr=1e-4)
-    elif args.optimizer == 'SGD':
-        optim = SGD(kp_network.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-
-    scheduler = ReduceLROnPlateau(optim, mode='min')
+    optim = Adam(kp_network.parameters(), lr=1e-4)
 
     """ apex mixed precision """
     if args.device != 'cpu':
@@ -136,7 +102,7 @@ if __name__ == '__main__':
                 if i % args.checkpoint_freq == 0:
                     kp_network.save(run_dir + '/checkpoint')
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Train', depth=20)
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='train', depth=20)
 
         """ test  """
         with torch.no_grad():
@@ -148,10 +114,9 @@ if __name__ == '__main__':
                 x_t, z, k, m, p, heatmap = kp_network(x, x_)
                 loss = criterion(x_t, x_, loss_mask)
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='Test', depth=20)
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='test', depth=20)
 
             ave_loss, best_loss = display.end_epoch(epoch, optim)
-            scheduler.step(ave_loss)
 
             """ save if model improved """
             if ave_loss <= best_loss and not args.demo:

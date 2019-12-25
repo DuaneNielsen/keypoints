@@ -192,3 +192,11 @@ class Coords(nn.Module):
         hm = torch.linspace(0, 1, h, dtype=x.dtype, device=x.device).reshape(1, 1, h, 1).repeat(b, 1, 1, w)
         wm = torch.linspace(0, 1, w, dtype=x.dtype, device=x.device).reshape(1, 1, 1, w).repeat(b, 1, h, 1)
         return torch.cat((x, hm, wm), dim=1)
+
+
+class Transporter(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, phi_xs, heta_xs, phi_xt, heta_xt):
+        return phi_xs * (1 - heta_xs) * (1 - heta_xt) + phi_xs * heta_xt

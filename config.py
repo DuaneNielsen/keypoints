@@ -47,9 +47,9 @@ def config():
     parser.add_argument('--dataset_test_len', type=int, default=None)
     parser.add_argument('--dataset_randomize', type=int, default=None)
 
-    parser.add_argument('--tps_cntl_pts', type=int, default=4)
-    parser.add_argument('--tps_variance', type=float, default=0.05)
-    parser.add_argument('--max_rotate', type=float, default=0.1)
+    parser.add_argument('--data_aug_tps_cntl_pts', type=int, default=4)
+    parser.add_argument('--data_aug_tps_variance', type=float, default=0.05)
+    parser.add_argument('--data_aug_max_rotate', type=float, default=0.1)
 
     args = parser.parse_args()
 

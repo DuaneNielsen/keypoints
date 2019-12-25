@@ -129,14 +129,14 @@ class ResultsLogger(object):
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if batch_i % self.image_capture_freq == 0:
-
-            index = torch.arange(4)
+            rows = 4
+            index = torch.arange(rows)
             kps = torch.stack([TVF.to_tensor(plot_keypoints_on_image(k[i], x_[i])).to(x.device) for i in range(4)])
             if loss_mask is not None:
-                train_panel = torch.cat([x[index], x_[index], loss_mask[index], kps[index]], dim=3)
+                train_panel = torch.cat([x[index], x_[index], x_t[index], loss_mask[index], kps[index]], dim=3)
             else:
-                train_panel = torch.cat([x[index], x_[index], kps[index]], dim=3)
-            train_panel = make_grid(train_panel, 4, 1).squeeze(0)
+                train_panel = torch.cat([x[index], x_[index], x_t[index], kps[index]], dim=3)
+            train_panel = make_grid(train_panel, rows, 1).squeeze(0)
 
             bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
             bottleneck_image = cv2.cvtColor(bottleneck_image, cv2.COLOR_RGBA2RGB)
