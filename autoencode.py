@@ -59,9 +59,9 @@ if __name__ == '__main__':
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit(args.model_image_channels, args.model_z_channels, encoder_core)
+    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    decoder = knn.Unit(args.model_z_channels, args.model_image_channels, decoder_core)
+    decoder = knn.Unit(args.model_z_channels, args.model_in_channels, decoder_core)
 
     auto_encoder = autoencoder.AutoEncoder(encoder, decoder, init_weights=args.load is None).to(args.device)
 

@@ -33,7 +33,7 @@ def config():
 
     """ model parameters """
     parser.add_argument('--model_type', type=str)
-    parser.add_argument('--model_image_channels', type=int, default=3)
+    parser.add_argument('--model_in_channels', type=int, default=3)
     parser.add_argument('--num_keypoints', type=int, default=10)
 
     """ hyper-parameters """

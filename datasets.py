@@ -5,6 +5,9 @@ import numpy as np
 import cv2
 import torch
 import torch.utils.data
+from torch import randperm
+from torch._utils import _accumulate
+import torch.random
 import torchvision as tv
 from torchvision import transforms
 import gym
@@ -152,6 +155,22 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
         return t, t1
 
 
+def random_split(dataset, lengths):
+    r"""
+    Randomly split a dataset into non-overlapping new datasets of given lengths.
+
+    Arguments:
+        dataset (Dataset): Dataset to be split
+        lengths (sequence): lengths of splits to be produced
+    """
+    if sum(lengths) > len(dataset):
+        raise ValueError("Sum of input lengths is greater than the length of the input dataset!")
+
+    indices = randperm(sum(lengths)).tolist()
+    return [torch.utils.data.Subset(dataset, indices[offset - length:offset]) for offset, length in zip(_accumulate(lengths), lengths)]
+
+
+
 D_CELEBA = 'celeba'
 D_SQUARE = 'square'
 D_PONG = 'pong'
@@ -180,7 +199,7 @@ def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
         raise ConfigException(f'total length in config is {total_len} but dataset has only {len(data)} entries')
 
     if randomize:
-        train, test = torch.utils.data.random_split(dataset, (train_len, test_len))
+        train, test = random_split(data, (train_len, test_len))
     else:
         train = torch.utils.data.Subset(data, range(0, train_len))
         test = torch.utils.data.Subset(data, range(train_len, total_len))
