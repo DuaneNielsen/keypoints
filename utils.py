@@ -70,12 +70,13 @@ def make_grid(tensor, rows, columns):
     :param columns:
     :return:
     """
+
     b, c, h, w = tensor.shape
     b = min(rows * columns, b)
     grid = torch.ones(b, c, h, w, device=tensor.device, dtype=tensor.dtype)
     index = torch.arange(b, device=tensor.device)
     grid[index] = tensor[index]
-    grid = grid.reshape(1, c, b * h, w)
+    grid = torch.cat(grid.unbind(0), dim=1).unsqueeze(0)
     grid = F.unfold(grid, kernel_size=(h, w), stride=(h, w))
     grid = F.fold(grid, output_size=(rows * h, columns * w), kernel_size=(h, w), stride=(h, w))
     return grid
@@ -105,8 +106,8 @@ class ResultsLogger(object):
         self.tb = SummaryWriter(log_dir=run_dir, comment=comment)
         self.image_capture_freq = image_capture_freq
         self.kp_rows = kp_rows
-        self.debug_view = UniImageViewer()
-        self.test_view = UniImageViewer()
+        self.test_view = UniImageViewer('test', screen_resolution=(128 * 5 * self.scale, 128 * 4 * self.scale))
+        self.debug_view = UniImageViewer('debug_view')
 
     def header(self, args):
 
@@ -128,15 +129,14 @@ class ResultsLogger(object):
             self.tb.add_scalar(f'{type}_loss', loss.item(), global_step=self.step)
 
         if batch_i % self.image_capture_freq == 0:
-            train_panel = []
-            for i in range(4):
-                kp_image = plot_keypoints_on_image(k[i], x_[i])
-                if loss_mask is not None:
-                    train_panel.append(torch.cat([x[i], x_[i], x_t[i], loss_mask[i], TVF.to_tensor(kp_image).to(x.device)], dim=2))
-                else:
-                    train_panel.append(
-                        torch.cat([x[i], x_[i], x_t[i], TVF.to_tensor(kp_image).to(x.device)], dim=2))
-            train_panel = torch.cat(train_panel, dim=1)
+
+            index = torch.arange(4)
+            kps = torch.stack([TVF.to_tensor(plot_keypoints_on_image(k[i], x_[i])).to(x.device) for i in range(4)])
+            if loss_mask is not None:
+                train_panel = torch.cat([x[index], x_[index], loss_mask[index], kps[index]], dim=3)
+            else:
+                train_panel = torch.cat([x[index], x_[index], kps[index]], dim=3)
+            train_panel = make_grid(train_panel, 4, 1).squeeze(0)
 
             bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
             bottleneck_image = cv2.cvtColor(bottleneck_image, cv2.COLOR_RGBA2RGB)
@@ -145,11 +145,11 @@ class ResultsLogger(object):
             for i, (k_i, x_i) in enumerate(zip(k.unbind(0), x_.unbind(0))):
                 if i >= 20:
                     break
-                kp_positions.append(plot_keypoints_on_image(k_i, x_i, radius=2, thickness=2))
+                kp_positions.append(plot_keypoints_on_image(k_i, x_i, radius=1, thickness=2))
 
             kp_positions += [np.ones(kp_positions[0].shape, dtype=kp_positions[0].dtype) * 254 for _ in range(20 - len(kp_positions))]
 
-            test_panel = self.panel(kp_positions)
+            test_panel = panel_np(kp_positions)
 
             if self.visuals:
                 self.viewer.render(train_panel)
@@ -158,18 +158,12 @@ class ResultsLogger(object):
             if self.tb:
                 scale = 2
                 train_panel = resize2D(train_panel, (train_panel.size(1) * scale, train_panel.size(2) * scale))
+                test_panel = resize2D(TVF.to_tensor(test_panel), (train_panel.size(1) * scale, train_panel.size(2) * scale))
                 self.tb.add_image(f'{type}_in_out', train_panel, global_step=self.step)
                 self.tb.add_image(f'{type}_bottleneck', TVF.to_tensor(bottleneck_image), global_step=self.step)
-                self.tb.add_image(f'{type}_batch', TVF.to_tensor(test_panel), global_step=self.step)
+                self.tb.add_image(f'{type}_batch', test_panel, global_step=self.step)
 
         self.step += 1
-
-    def panel(self, kp_positions):
-        test_panel = []
-        for i in range(4):
-            test_panel.append(np.concatenate(kp_positions[i * 5: i * 5 + 5], axis=1))
-        test_panel = np.concatenate(test_panel, axis=0)
-        return test_panel
 
     def end_epoch(self, epoch, optim):
 

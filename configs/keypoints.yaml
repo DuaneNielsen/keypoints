@@ -15,6 +15,6 @@ tps_cntl_pts: 4
 tps_variance: 0.05
 max_rotate: 0.1
 
-batch_size: 16
+batch_size: 32
 epochs: 24
 opt_level: O2
