@@ -7,56 +7,71 @@ import torch
 def config():
     """
     Reads the command switches and creates a config
-    The --config file overrides command line switches
+    Command line switches override config files
     :return:
     """
 
     """ config """
     parser = argparse.ArgumentParser(description='load_yaml_file')
-    parser.add_argument('--device', type=str)
-    parser.add_argument('--run_id', type=int, required=True)
-    parser.add_argument('--comment', type=str, default='')
+    parser.add_argument('-d', '--device', type=str)
+    parser.add_argument('-r', '--run_id', type=int, required=True)
+    parser.add_argument('--comment', type=str)
     parser.add_argument('--demo', action='store_true', default=False)
-    parser.add_argument('--load', type=str, default=None)
+    parser.add_argument('-l', '--load', type=str, default=None)
     parser.add_argument('--transfer_load', type=str, default=None)
-    parser.add_argument('--checkpoint_freq', type=int, default=100)
-    parser.add_argument('--epochs', type=int, default=800)
+    parser.add_argument('--checkpoint_freq', type=int)
     parser.add_argument('--data_root', type=str, default='data')
-    parser.add_argument('--opt_level', type=str, default='O0')
     parser.add_argument('--config', type=str, default=None)
     parser.add_argument('--tag', type=str, default='dev')
+    parser.add_argument('--epochs', type=int, default=800)
 
     """ visualization params """
     parser.add_argument('--display', action='store_true')
-    parser.add_argument('--display_freq', type=int, default=10)
-    parser.add_argument('--display_kp_rows', type=int, default=5)
+    parser.add_argument('--display_freq', type=int)
+    parser.add_argument('--display_kp_rows', type=int)
 
     """ model parameters """
+    parser.add_argument('--opt_level', type=str)
     parser.add_argument('--model_type', type=str)
-    parser.add_argument('--model_in_channels', type=int, default=3)
-    parser.add_argument('--num_keypoints', type=int, default=10)
+    parser.add_argument('--model_in_channels', type=int)
+    parser.add_argument('--model_keypoints', type=int)
 
     """ hyper-parameters """
     parser.add_argument('--optimizer', type=str, default='Adam')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--batch_size', type=int)
+    parser.add_argument('--lr', type=float)
 
     """ data and data augmentation parameters """
-    parser.add_argument('--dataset', type=str, default='square')
-    parser.add_argument('--dataset_train_len', type=int, default=None)
-    parser.add_argument('--dataset_test_len', type=int, default=None)
-    parser.add_argument('--dataset_randomize', type=int, default=None)
+    parser.add_argument('--dataset', type=str)
+    parser.add_argument('--dataset_train_len', type=int)
+    parser.add_argument('--dataset_test_len', type=int)
+    parser.add_argument('--dataset_randomize', type=int)
 
-    parser.add_argument('--data_aug_tps_cntl_pts', type=int, default=4)
-    parser.add_argument('--data_aug_tps_variance', type=float, default=0.05)
-    parser.add_argument('--data_aug_max_rotate', type=float, default=0.1)
+    parser.add_argument('--data_aug_tps_cntl_pts', type=int)
+    parser.add_argument('--data_aug_tps_variance', type=float)
+    parser.add_argument('--data_aug_max_rotate', type=float)
 
     args = parser.parse_args()
 
-    if args.config is not None:
-        with Path(args.config).open() as f:
+    def load_if_not_set(filepath, args):
+        """
+        Adds the update to args if it's not loaded
+        :param filepath:
+        :return:
+        """
+        with Path(filepath).open() as f:
             conf = yaml.load(f, Loader=yaml.FullLoader)
-            vars(args).update(conf)
+            for key, value in conf.items():
+                if key in vars(args) and vars(args)[key] is None:
+                    vars(args)[key] = conf[key]
+                elif key not in vars(args):
+                    vars(args)[key] = conf[key]
+        return args
+
+    if args.config is not None:
+        args = load_if_not_set(args.config, args)
+
+    args = load_if_not_set('configs/defaults.yaml', args)
 
     if args.device is None:
         args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
