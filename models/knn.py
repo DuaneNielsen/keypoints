@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch
 from torch import nn as nn
-from models.functional import gaussian_like_function, spacial_softmax
+from models.functional import gaussian_like_function, spacial_softmax, spacial_logsoftmax
 
 
 class Container(nn.Module):
@@ -98,6 +98,13 @@ class SpatialSoftmax(torch.nn.Module):
 
     def forward(self, heatmap, probs=False):
         return spacial_softmax(heatmap, probs)
+
+class SpatialLogSoftmax(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, heatmap, probs=False):
+        return spacial_logsoftmax(heatmap, probs)
 
 
 class Unit(nn.Module):

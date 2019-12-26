@@ -10,7 +10,7 @@ class KeyNet(knn.Container):
         super().__init__()
         self.encoder = encoder
         self.keypoint = keypoint
-        self.ssm = knn.SpatialSoftmax()
+        self.ssm = knn.SpatialLogSoftmax()
         self.key2map = key2map
         self.decoder = decoder
 

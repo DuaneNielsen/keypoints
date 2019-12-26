@@ -11,6 +11,6 @@ dataset_test_len: 2100
 dataset_randomize: True
 data_aug_type: None
 
-batch_size: 120
+batch_size: 30
 epochs: 2000
 opt_level: O2

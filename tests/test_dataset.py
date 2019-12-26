@@ -39,8 +39,8 @@ def test_pong():
         s, r, done, info = env.step(env.action_space.sample())
         v.render(s)
         s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
-        s = s[25:, :]
-        s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_LINEAR)
+        s = s[34:168, :]
+        s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
         l.render(s)
 
 
