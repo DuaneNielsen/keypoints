@@ -51,7 +51,7 @@ decoder_cfg = {
     'F': [512, 512, 'U', 256, 256, 'U', 256, 256, 'U', 128, 64],
     'VGG_PONG': [32, 'U', 16, 'U', 16],
     'VGG_PONG_TRIVIAL': [16, 16],
-    'VGG_PONG_LAYERNECK': [32, 16],
+    'VGG_PONG_LAYERNECK': [32, 32, 16, 16],
 }
 
 vgg_cfg = {
@@ -63,4 +63,5 @@ vgg_cfg = {
     'VGG_PONG': [16, 'M', 16, 'M', 32],
     'VGG_PONG_TRIVIAL': [16, 16],
     'VGG_PONG_LAYERNECK': [16, 32],
+    'VGG_PONG_LD': [16, 32, 32, 16],
 }

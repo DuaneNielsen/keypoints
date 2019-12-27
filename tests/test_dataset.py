@@ -29,7 +29,7 @@ def test_dataset():
 
 def test_pong():
     v = UniImageViewer()
-    l = UniImageViewer(title='grey', screen_resolution=(32, 32))
+    l = UniImageViewer(title='processed', screen_resolution=(32, 32))
     env = gym.make('Pong-v0')
 
     s = env.reset()
@@ -38,9 +38,10 @@ def test_pong():
     while not done:
         s, r, done, info = env.step(env.action_space.sample())
         v.render(s)
-        s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
-        s = s[34:168, :]
-        s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
+        s = d.pong_color_prepro(s)
+        #s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
+        #s = s[34:168, :]
+        #s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
         l.render(s)
 
 

@@ -74,14 +74,15 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
     s = s[34:168, :]
-    s = skimage.measure.block_reduce(s, (4, 4), np.max)
+    #s = skimage.measure.block_reduce(s, (4, 4), np.max)
     s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
     return s
 
 
 def pong_color_prepro(s):
-    s = s[:, 25:, :]
-    s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_LINEAR)
+    s = s[34:168, :]
+    s = skimage.measure.block_reduce(s, (4, 4, 1), np.max)
+    s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
     return s
 
 
@@ -200,7 +201,15 @@ def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
             transforms.Normalize((0.5,), (0.5,))
         ])
         data = AtariDataset('Pong-v0', total_len, pong_prepro,
-                            end_trajectory=if_done_or_nonzero_reward,
+                            end_trajectory=if_done,
+                            transforms=transform)
+    elif dataset == 'pong_color':
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        data = AtariDataset('Pong-v0', total_len, pong_color_prepro,
+                            end_trajectory=if_done,
                             transforms=transform)
     else:
         raise ConfigException('pick a dataset')

@@ -1,0 +1,16 @@
+checkpoint_freq: 1000
+
+model_type: VGG_PONG_LAYERNECK
+model_in_channels: 3
+model_z_channels : 16
+model_keypoints : 3
+
+dataset: pong_color
+dataset_train_len: 190000
+dataset_test_len: 2100
+dataset_randomize: True
+data_aug_type: None
+
+batch_size: 30
+epochs: 2000
+opt_level: O2

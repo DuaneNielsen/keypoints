@@ -36,8 +36,8 @@ def spacial_softmax(heatmap, probs=False):
 
 def spacial_logsoftmax(heatmap, probs=False):
     height, width = heatmap.size(2), heatmap.size(3)
-    hp, wp = marginal_logsoftmax(heatmap, dim=3), marginal_softmax(heatmap, dim=2)
-    hk, wk = logprob_to_keypoints(hp, height), prob_to_keypoints(wp, width)
+    hp, wp = marginal_logsoftmax(heatmap, dim=3), marginal_logsoftmax(heatmap, dim=2)
+    hk, wk = logprob_to_keypoints(hp, height), logprob_to_keypoints(wp, width)
     if probs:
         return torch.stack((hk, wk), dim=2), (torch.exp(hp), torch.exp(wp))
     else:

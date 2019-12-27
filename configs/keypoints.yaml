@@ -4,6 +4,7 @@ model_type: F
 model_in_channels: 3
 model_z_channels : 64
 model_keypoints : 10
+opt_level: O2
 
 dataset: celeba
 dataset_train_len: 190000
@@ -16,4 +17,3 @@ data_aug_max_rotate: 0.1
 
 batch_size: 32
 epochs: 24
-opt_level: O2
