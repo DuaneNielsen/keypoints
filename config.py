@@ -22,7 +22,6 @@ def config():
     parser.add_argument('--checkpoint_freq', type=int)
     parser.add_argument('--data_root', type=str, default='data')
     parser.add_argument('--config', type=str, default=None)
-    parser.add_argument('--tag', type=str, default='dev')
     parser.add_argument('--epochs', type=int, default=800)
 
     """ visualization params """

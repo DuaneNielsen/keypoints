@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     args = config()
     torch.cuda.set_device(args.device)
-    run_dir = f'data/models/{args.tag}/transporter/{args.model_type}/run_{args.run_id}'
+    run_dir = f'data/models/transporter/{args.model_type}/run_{args.run_id}'
 
     """ logging """
     display = ResultsLogger(run_dir=run_dir,
@@ -44,14 +44,6 @@ if __name__ == '__main__':
 
     """ model """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
-
-    feature_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    feature = knn.Unit(args.model_in_channels, args.model_z_channels, feature_core)
-
-    keynet_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    keynet = knn.Unit(args.model_in_channels, args.model_keypoints, keynet_core)
-    keymapper = knn.GaussianLike(sigma=0.1)
-
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])

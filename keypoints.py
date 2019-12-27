@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     args = config()
     torch.cuda.set_device(args.device)
-    run_dir = f'data/models/{args.tag}/keypoints/{args.model_type}/run_{args.run_id}'
+    run_dir = f'data/models/keypoints/{args.model_type}/run_{args.run_id}'
 
     """ logging """
     display = ResultsLogger(run_dir=run_dir,

@@ -2,32 +2,41 @@ import torch
 from models import knn
 
 
-class KeyNet(knn.Container):
-    def __init__(self, feature_cnn,
-                 keypoint_cnn, key2map,
+class TransporterNet(knn.Container):
+    def __init__(self,
+                 feature_cnn,
+                 keypoint_cnn,
+                 key2map,
                  decoder,
                  init_weights=True):
         super().__init__()
         self.feature = feature_cnn
         self.keypoint = keypoint_cnn
-        self.ssm = knn.SpatialSoftmax()
+        self.ssm = knn.SpatialLogSoftmax()
         self.key2map = key2map
         self.decoder = decoder
 
         if init_weights:
             self._initialize_weights()
 
-    def forward(self, x, x_t):
+    def forward(self, xs, xt):
 
-        z = self.feature(x)
+        with torch.no_grad():
+            phi_xs = self.feature(xs)
+            heatmap_xs = self.keypoint(xs)
+            k_xs, p_xs = self.ssm(heatmap_xs, probs=True)
+            heta_xs = self.key2map(k_xs, height=phi_xs.size(2), width=phi_xs.size(3))
 
-        heatmap = self.keypoint(x_t)
-        k, p = self.ssm(heatmap, probs=True)
-        m = self.key2map(k, height=z.size(2), width=z.size(3))
+        phi_xt = self.feature(xt)
+        heatmap_xt = self.keypoint(xt)
+        k_xt, p_xt = self.ssm(heatmap_xt, probs=True)
+        heta_xt = self.key2map(k_xt, height=phi_xt.size(2), width=phi_xt.size(3))
 
-        x_t = self.decoder(torch.cat((z, m), dim=1))
+        z = phi_xs * (1 - heta_xs) * (1 - heta_xt) + phi_xt * heta_xt
 
-        return x_t, z, k, m, p, heatmap
+        x_t = self.decoder(z)
+
+        return x_t, z, k_xt, heta_xt, p_xt, heatmap_xt
 
     def load(self, directory):
         self.feature.load(directory + '/encoder')
