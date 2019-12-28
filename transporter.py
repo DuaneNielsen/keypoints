@@ -5,7 +5,7 @@ from tqdm import tqdm
 from torch.optim import Adam
 
 from data_augments import TpsAndRotate, nop
-from models import vgg, keynet
+from models import vgg, transporter
 from utils import ResultsLogger
 from apex import amp
 from datasets import get_dataset
@@ -47,24 +47,25 @@ if __name__ == '__main__':
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
     decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
-    decoder = knn.Unit(args.model_z_channels + args.model_keypoints, args.model_in_channels, decoder_core)
+    decoder = knn.Unit(args.model_z_channels, args.model_in_channels, decoder_core)
     keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core)
     keymapper = knn.GaussianLike(sigma=0.1)
-    kp_network = keynet.KeyNet(encoder, keypoint, keymapper, decoder, init_weights=True)
-    kp_network = kp_network.to(args.device)
+    transporter_net = transporter.TransporterNet(encoder, keypoint, keymapper, decoder, init_weights=True,
+                                                 combine_method='squash_and_clip')
+    transporter_net = transporter_net.to(args.device)
 
     if args.load is not None:
-        kp_network.load(args.load)
+        transporter_net.load(args.load)
     if args.transfer_load is not None:
-        kp_network.load_from_autoencoder(args.transfer_load)
+        transporter_net.load_from_autoencoder(args.transfer_load)
 
     """ optimizer """
-    optim = Adam(kp_network.parameters(), lr=1e-4)
+    optim = Adam(transporter_net.parameters(), lr=1e-4)
 
     """ apex mixed precision """
     if args.device != 'cpu':
-        model, optimizer = amp.initialize(kp_network, optim, opt_level=args.opt_level)
+        model, optimizer = amp.initialize(transporter_net, optim, opt_level=args.opt_level)
 
     """ loss function """
     def l2_reconstruction_loss(x, x_, loss_mask=None):
@@ -88,7 +89,7 @@ if __name__ == '__main__':
                 x, x_, loss_mask = augment(*data)
 
                 optim.zero_grad()
-                x_t, z, k, m, p, heatmap = kp_network(x, x_)
+                x_t, z, k, m, p, heatmap, mask_xs, mask_xt = transporter_net(x, x_)
 
                 loss = criterion(x_t, x_, loss_mask)
 
@@ -100,9 +101,10 @@ if __name__ == '__main__':
                 optim.step()
 
                 if i % args.checkpoint_freq == 0:
-                    kp_network.save(run_dir + '/checkpoint')
+                    transporter_net.save(run_dir + '/checkpoint')
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='train', depth=20)
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask,
+                            type='train', depth=20, mask_xs=mask_xs, mask_xt=mask_xt)
 
         """ test  """
         with torch.no_grad():
@@ -111,13 +113,14 @@ if __name__ == '__main__':
                 data = to_device(data, device=args.device)
                 x, x_, loss_mask = augment(*data)
 
-                x_t, z, k, m, p, heatmap = kp_network(x, x_)
+                x_t, z, k, m, p, heatmap, mask_xs, mask_xt = transporter_net(x, x_)
                 loss = criterion(x_t, x_, loss_mask)
 
-                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask, type='test', depth=20)
+                display.log(batch, epoch, i, loss, optim, x, x_, x_t, heatmap, k, m, p, loss_mask,
+                            type='test', depth=20, mask_xs=mask_xs, mask_xt=mask_xt)
 
             ave_loss, best_loss = display.end_epoch(epoch, optim)
 
             """ save if model improved """
             if ave_loss <= best_loss and not args.demo:
-                kp_network.save(run_dir + '/best')
+                transporter_net.save(run_dir + '/best')

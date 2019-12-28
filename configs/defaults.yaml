@@ -1,3 +1,4 @@
 checkpoint_freq: 1000
 opt_level: O0
 display_kp_rows: 4
+display_freq: 20

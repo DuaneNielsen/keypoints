@@ -119,7 +119,8 @@ class ResultsLogger(object):
         if self.tb:
             self.tb.add_text(mesg, 'Config', global_step=0)
 
-    def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, hm, k, m, p, loss_mask, type, depth=None):
+    def log(self, tqdm, epoch, batch_i, loss, optim, x, x_, x_t, hm, k, m, p, loss_mask, type, depth=None,
+            mask_xs=None, mask_xt=None):
         self.ll.append(loss.item())
         if depth is not None and len(self.ll) > depth:
             self.ll.pop(0)
@@ -138,7 +139,7 @@ class ResultsLogger(object):
                 train_panel = torch.cat([x[index], x_[index], x_t[index], kps[index]], dim=3)
             train_panel = make_grid(train_panel, rows, 1).squeeze(0)
 
-            bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows)
+            bottleneck_image = plot_bottleneck_layer(hm=hm, p=p, k=k, g=m, rows=self.kp_rows, mask_xs=mask_xs, mask_xt=mask_xt)
             bottleneck_image = cv2.cvtColor(bottleneck_image, cv2.COLOR_RGBA2RGB)
 
             kp_positions = []
@@ -308,7 +309,7 @@ def plot_keypoints_on_image(k, image_tensor, radius=1, thickness=1):
     return img
 
 
-def plot_joint(img, x_marginal, y_marginal, k, color):
+def plot_joint(img, x_marginal, y_marginal, k=None, color='#949494'):
     w, h = matplotlib.figure.figaspect(1.0)
     fig = plt.figure(figsize=(h, w))
     canvas = FigureCanvas(fig)
@@ -331,22 +332,24 @@ def plot_joint(img, x_marginal, y_marginal, k, color):
     width = x_marginal.shape[0]
     ax_marg_top.bar(np.arange(width), x_marginal, color='#949494')
     xbins = np.zeros(width)
-    k_w = floor(k[1].item()  * width)
-    # dirty hack for now
-    if k_w > width - 1:
-        k_w = width -1
-    xbins[k_w] = x_marginal.max()
-    ax_marg_top_kp.bar(np.arange(width), xbins, color=color)
+    if k is not None:
+        k_w = floor(k[1].item()  * width)
+        # dirty hack for now
+        if k_w > width - 1:
+            k_w = width -1
+        xbins[k_w] = x_marginal.max()
+        ax_marg_top_kp.bar(np.arange(width), xbins, color=color)
 
     height = y_marginal.shape[0]
     ax_marg_side.barh(np.arange(height), y_marginal, color='#949494')
     ax_marg_side.set_ylim(height, 0)
     ybins = np.zeros(height)
-    k_h = floor(k[0].item() * height)
-    if k_h > height - 1:
-        k_h = height - 1
-    ybins[k_h] = y_marginal.max()
-    ax_marg_side_kp.barh(np.arange(height), ybins, color=color)
+    if k is not None:
+        k_h = floor(k[0].item() * height)
+        if k_h > height - 1:
+            k_h = height - 1
+        ybins[k_h] = y_marginal.max()
+        ax_marg_side_kp.barh(np.arange(height), ybins, color=color)
 
     # Turn off tick labels on marginals
     plt.setp(ax_joint.get_xticklabels(), visible=False)
@@ -362,13 +365,17 @@ def plot_joint(img, x_marginal, y_marginal, k, color):
     return cnvs
 
 
-def plot_bottleneck_layer(hm, p, k, g, rows):
+def plot_bottleneck_layer(hm, p, k, g, rows, mask_xs=None, mask_xt=None):
     img = []
+
+    if mask_xs is not None:
+        img.append(plot_transporter_masks(mask_xs, mask_xt))
+
     for index in range(k.size(1)):
         color = '#' + colormap[index]
         img.append(plot_single_bottleneck(index, hm, p, k, g, color))
 
-    pads = - k.size(1) % rows
+    pads = - len(img) % rows
     for i in range(pads):
         img.append(np.ones_like(img[0]) * 255)
 
@@ -389,11 +396,23 @@ def plot_single_bottleneck(index, hm, p, k, g, color):
                          k[0, index].cpu().detach().numpy(),
                          color
                          )
+    g_x_marginal = g[0, index].sum(0).cpu().detach().numpy()
+    g_y_marginal = g[0, index].sum(1).cpu().detach().numpy()
     g_plot = plot_joint(g[0, index].cpu().detach().numpy(),
-                        p[1][0, index].cpu().detach().numpy().squeeze(),
-                        p[0][0, index].cpu().detach().numpy().squeeze(),
+                        g_x_marginal,
+                        g_y_marginal,
                         k[0, index].cpu().detach().numpy(),
                         color
                         )
     image = np.concatenate((hm_plot, g_plot), axis=1)
     return image
+
+
+def plot_transporter_masks(mask_xs, mask_xt):
+    g_x_marginal = mask_xs[0, 0].sum(0).cpu().detach().numpy()
+    g_y_marginal = mask_xs[0, 0].sum(1).cpu().detach().numpy()
+    plot_mask_xs = plot_joint(mask_xs[0, 0].cpu().detach().numpy(), g_x_marginal, g_y_marginal)
+    g_x_marginal = mask_xt[0, 0].sum(0).cpu().detach().numpy()
+    g_y_marginal = mask_xt[0, 0].sum(1).cpu().detach().numpy()
+    plot_mask_xt = plot_joint(mask_xt[0, 0].cpu().detach().numpy(), g_x_marginal, g_y_marginal)
+    return np.concatenate((plot_mask_xs, plot_mask_xt), axis=1)
