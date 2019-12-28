@@ -15,7 +15,13 @@ in Pytorch by Duane
 
 ### result samples
 
+conditional image generation (Tomas and Ankush et al)
 
+![alt text](resources/keypoints_run.png)
+
+transporter network (Ankush et al)
+
+![alt_text](resources/transporter_run.png)
 
 ### installing
 
