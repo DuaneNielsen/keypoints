@@ -1,0 +1,19 @@
+checkpoint_freq: 1000
+
+model_type: F
+model_in_channels: 3
+model_z_channels : 64
+model_keypoints : 10
+opt_level: O2
+
+dataset: celeba
+dataset_train_len: 190000
+dataset_test_len: 1100
+dataset_randomize: False
+data_aug_type: tps_and_rotate
+data_aug_tps_cntl_pts: 4
+data_aug_tps_variance: 0.05
+data_aug_max_rotate: 0.1
+
+batch_size: 16
+epochs: 24
