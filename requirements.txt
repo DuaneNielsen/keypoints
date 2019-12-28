@@ -9,3 +9,5 @@ matplotlib
 gym[atari]
 pyyaml
 tensorboard
+apex
+scikit-image
