@@ -1,4 +1,4 @@
-checkpoint_freq: 1000
+checkpoint_freq: 10000
 
 model_type: VGG_PONG_LAYERNECK
 model_in_channels: 1
