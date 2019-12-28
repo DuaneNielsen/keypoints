@@ -6,7 +6,7 @@ model_z_channels : 16
 model_keypoints : 3
 
 dataset: pong
-dataset_train_len: 190000
+dataset_train_len: 20000
 dataset_test_len: 2100
 dataset_randomize: True
 data_aug_type: None
