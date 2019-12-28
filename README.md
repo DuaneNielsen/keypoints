@@ -7,9 +7,15 @@ Advances in Neural Information Processing Systems (NeurIPS) 2018.
 
 and a partial replication of 
 
-[Unsupervised Learning of Object Keypoints for Perception and Control](https://arxiv.org/abs/1906.11883)
+# [Unsupervised Learning of Object Keypoints for Perception and Control](https://arxiv.org/abs/1906.11883)
+
+Tejas Kulkarni, Ankush Gupta, Catalin Ionescu, Sebastian Borgeaud, Malcolm Reynolds, Andrew Zisserman, Volodymyr Mnih.  *Unsupervised Learning of Object Keypoints for Perception and Control*.  NeurIPS 2019.  [\[arXiv\]](https://arxiv.org/abs/1906.11883).
 
 in Pytorch by Duane
+
+### result samples
+
+
 
 ### installing
 
