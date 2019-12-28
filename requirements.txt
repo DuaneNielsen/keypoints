@@ -8,3 +8,4 @@ pytest
 matplotlib
 gym[atari]
 pyyaml
+tensorboard
