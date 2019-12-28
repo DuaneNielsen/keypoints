@@ -27,6 +27,8 @@ transporter network (Ankush et al)
 
 requires python 3.6 and NVIDIA apex
 
+windows not supported
+
 ```
 git clone https://github.com/duanenielsen/keypoints
 python3 -m venv ~/.venv/keypoints
