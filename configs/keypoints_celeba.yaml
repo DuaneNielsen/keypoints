@@ -15,5 +15,5 @@ data_aug_tps_cntl_pts: 4
 data_aug_tps_variance: 0.05
 data_aug_max_rotate: 0.1
 
-batch_size: 32
+batch_size: 16
 epochs: 24
