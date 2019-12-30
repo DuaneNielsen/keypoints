@@ -200,6 +200,7 @@ def random_split(dataset, lengths):
 D_CELEBA = 'celeba'
 D_SQUARE = 'square'
 D_PONG = 'pong'
+D_PONG_COLOR = 'pong_color'
 
 pong_color_transform = transforms.Compose([
             transforms.ToTensor(),
@@ -211,6 +212,22 @@ pong_grey_transform = transforms.Compose([
     transforms.Normalize((0.5,), (0.5,))
 ])
 
+celeba_transform = transforms.Compose([
+    transforms.Resize((128, 128)),
+    transforms.ToTensor(),
+])
+
+transforms = {
+    'celeba': celeba_transform,
+    'pong': pong_grey_transform,
+    'pong_color': pong_color_transform
+}
+
+prepro = {
+    'pong': pong_prepro,
+    'pong_color': pong_color_prepro
+}
+
 
 def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
 
@@ -219,21 +236,17 @@ def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
     if dataset == 'celeba':
         path = Path(data_root + '/celeba-low')
         """ celeba a transforms """
-        transform = transforms.Compose([
-            transforms.Resize((128, 128)),
-            transforms.ToTensor(),
-        ])
-        data = tv.datasets.ImageFolder(str(path), transform=transform)
+        data = tv.datasets.ImageFolder(str(path), transform=transforms[dataset])
     elif dataset == 'square':
         data = SquareDataset(size=200000, transform=transforms.ToTensor())
     elif dataset == 'pong':
-        data = AtariDataset('Pong-v0', total_len, pong_prepro,
+        data = AtariDataset('Pong-v0', total_len, prepro[dataset],
                             end_trajectory=if_done,
-                            transforms=pong_grey_transform)
+                            transforms=transforms[dataset])
     elif dataset == 'pong_color':
-        data = AtariDataset('Pong-v0', total_len, pong_color_prepro,
+        data = AtariDataset('Pong-v0', total_len, prepro[dataset],
                             end_trajectory=if_done,
-                            transforms=pong_color_transform)
+                            transforms=transforms[dataset])
     else:
         raise ConfigException('pick a dataset')
 

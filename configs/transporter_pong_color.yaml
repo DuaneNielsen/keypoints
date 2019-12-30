@@ -12,5 +12,5 @@ dataset_randomize: True
 data_aug_type: None
 
 batch_size: 32
-epochs: 2000
+epochs: 200
 opt_level: O2
