@@ -87,6 +87,12 @@ def pong_color_prepro(s):
     return s
 
 
+def pacman_color_prepro(s):
+    s = s[:171, :]
+    s = cv2.resize(s, dsize=(128, 128), interpolation=cv2.INTER_AREA)
+    return s
+
+
 def if_done(done, r):
     return done
 
@@ -196,18 +202,17 @@ def random_split(dataset, lengths):
     return [torch.utils.data.Subset(dataset, indices[offset - length:offset]) for offset, length in zip(_accumulate(lengths), lengths)]
 
 
-
 D_CELEBA = 'celeba'
 D_SQUARE = 'square'
 D_PONG = 'pong'
 D_PONG_COLOR = 'pong_color'
 
-pong_color_transform = transforms.Compose([
+color_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
 
-pong_grey_transform = transforms.Compose([
+grey_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize((0.5,), (0.5,))
 ])
@@ -219,13 +224,15 @@ celeba_transform = transforms.Compose([
 
 transforms = {
     'celeba': celeba_transform,
-    'pong': pong_grey_transform,
-    'pong_color': pong_color_transform
+    'pong': grey_transform,
+    'pong_color': color_transform,
+    'pacman': color_transform,
 }
 
 prepro = {
     'pong': pong_prepro,
-    'pong_color': pong_color_prepro
+    'pong_color': pong_color_prepro,
+    'pacman': pacman_color_prepro
 }
 
 
@@ -245,6 +252,10 @@ def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
                             transforms=transforms[dataset])
     elif dataset == 'pong_color':
         data = AtariDataset('Pong-v0', total_len, prepro[dataset],
+                            end_trajectory=if_done,
+                            transforms=transforms[dataset])
+    elif dataset == 'pacman':
+        data = AtariDataset('MsPacman-v0', total_len, prepro[dataset],
                             end_trajectory=if_done,
                             transforms=transforms[dataset])
     else:

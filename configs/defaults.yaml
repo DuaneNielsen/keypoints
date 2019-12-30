@@ -3,4 +3,4 @@ opt_level: O0
 display_kp_rows: 4
 display_freq: 5000
 
-transporter_combine_mode: sum_and_clamp
+transporter_combine_mode: max
