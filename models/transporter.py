@@ -43,7 +43,7 @@ class TransporterNet(knn.Container):
                 mask_xt = m_xt[:, i:i+1]
                 phi_xs = phi_xs * (1 - mask_xs) * (1 - mask_xt) + phi_xt * mask_xt
 
-        elif self.combine_method == 'squash_and_clip':
+        elif self.combine_method == 'sum_and_clamp':
             mask_xs = torch.sum(m_xs, dim=1, keepdim=True).clamp(0.0, 1.0)
             mask_xt = torch.sum(m_xt, dim=1, keepdim=True).clamp(0.0, 1.0)
             phi_xs = phi_xs * (1 - mask_xs) * (1 - mask_xt) + phi_xt * mask_xt

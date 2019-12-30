@@ -59,7 +59,7 @@ if __name__ == '__main__':
     for p in keymapper.parameters(recurse=True):
         p.requires_grad = False
     transporter_net = transporter.TransporterNet(encoder, keypoint, keymapper, decoder, init_weights=True,
-                                                 combine_method='max')
+                                                 combine_method=args.transporter_combine_mode)
     transporter_net = transporter_net.to(args.device)
 
     if args.load is not None:

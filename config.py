@@ -34,6 +34,7 @@ def config():
     parser.add_argument('--model_type', type=str)
     parser.add_argument('--model_in_channels', type=int)
     parser.add_argument('--model_keypoints', type=int)
+    parser.add_argument('--transporter_combine_mode', type=str)
 
     """ hyper-parameters """
     parser.add_argument('--optimizer', type=str, default='Adam')
