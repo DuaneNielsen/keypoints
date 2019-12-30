@@ -44,6 +44,8 @@ def spacial_logsoftmax(heatmap, probs=False):
         return torch.stack((hk, wk), dim=2)
 
 
+
+
 def squared_diff(h, height):
     hs = torch.linspace(0, 1, height, device=h.device).type_as(h).expand(h.shape[0], h.shape[1], height)
     hm = h.expand(height, -1, -1).permute(1, 2, 0)
@@ -60,3 +62,11 @@ def gaussian_like_function(kp, height, width, sigma=0.1, eps=1e-6):
     gm = torch.exp(gm)
     return gm
 
+
+def point_map(kp, h, w):
+    hm = squared_diff(kp[:, :, 0], h)
+    wm = squared_diff(kp[:, :, 1], w)
+    hm = hm.expand(w, -1, -1, -1).permute(1, 2, 3, 0)
+    wm = wm.expand(h, -1, -1, -1).permute(1, 2, 0, 3)
+    gm = - (hm + wm)
+    return gm

@@ -309,6 +309,12 @@ def plot_keypoints_on_image(k, image_tensor, radius=1, thickness=1):
     return img
 
 
+def plot_joint_and_marginals(img):
+    x_marginal = img[0, 0].sum(0).cpu().detach().numpy()
+    y_marginal = img[0, 0].sum(1).cpu().detach().numpy()
+    return plot_joint(img, x_marginal, y_marginal)
+
+
 def plot_joint(img, x_marginal, y_marginal, k=None, color='#949494'):
     w, h = matplotlib.figure.figaspect(1.0)
     fig = plt.figure(figsize=(h, w))
@@ -396,6 +402,7 @@ def plot_single_bottleneck(index, hm, p, k, g, color):
                          k[0, index].cpu().detach().numpy(),
                          color
                          )
+    index = 0 if g.size(1) == 1 else index
     g_x_marginal = g[0, index].sum(0).cpu().detach().numpy()
     g_y_marginal = g[0, index].sum(1).cpu().detach().numpy()
     g_plot = plot_joint(g[0, index].cpu().detach().numpy(),

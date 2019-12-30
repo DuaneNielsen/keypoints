@@ -1,5 +1,7 @@
 import torch
 from models import knn
+import torch.nn as nn
+import models.functional as MF
 
 
 class TransporterNet(knn.Container):
@@ -26,7 +28,6 @@ class TransporterNet(knn.Container):
         heatmap = self.keypoint(x)
         k, p = self.ssm(heatmap, probs=True)
         m = self.key2map(k, height=phi.size(2), width=phi.size(3))
-        #heta, _ = torch.max(m, dim=1, keepdim=True)
         return phi, heatmap, k, p, m
 
     def forward(self, xs, xt):
@@ -47,9 +48,15 @@ class TransporterNet(knn.Container):
             mask_xt = torch.sum(m_xt, dim=1, keepdim=True).clamp(0.0, 1.0)
             phi_xs = phi_xs * (1 - mask_xs) * (1 - mask_xt) + phi_xt * mask_xt
 
+        elif self.combine_method == 'pretrained_network':
+            mask_xs = m_xs
+            mask_xt = m_xt
+            phi_xs = phi_xs * (1 - mask_xs) * (1 - mask_xt) + phi_xt * mask_xt
 
-
-        #z = phi_xs * (1 - heta_xs) * (1 - heta_xt) + phi_xt * heta_xt
+        elif self.combine_method == 'max':
+            mask_xs, i = torch.max(m_xs, dim=1, keepdim=True)
+            mask_xt, i = torch.max(m_xt, dim=1, keepdim=True)
+            phi_xs = phi_xs * (1 - mask_xs) * (1 - mask_xt) + phi_xt * mask_xt
 
         x_t = self.decoder(phi_xs)
 
@@ -71,3 +78,31 @@ class TransporterNet(knn.Container):
         self.keypoint.save(directory + '/keypoint')
         self.decoder.save(directory + '/decoder')
 
+
+class MaskMaker(nn.Module):
+    """  uses a pretrained convolutions to make a mask from keypoints """
+    def __init__(self, map_f):
+        super().__init__()
+        self.map = map_f
+
+    def __call__(self, k, height, width):
+        with torch.no_grad():
+            m = MF.point_map(k, height, width)
+            return self.map(m)
+
+
+class TransporterMap(knn.Container):
+    def __init__(self, mapper, init_weights=True):
+        super().__init__()
+        self.map = mapper
+        if init_weights:
+            self._initialize_weights()
+
+    def forward(self, x):
+        return self.map(x)
+
+    def load(self, directory):
+        self.map.load(directory + '/map')
+
+    def save(self, directory):
+        self.map.save(directory + '/map')

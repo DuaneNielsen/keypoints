@@ -64,4 +64,5 @@ vgg_cfg = {
     'VGG_PONG_TRIVIAL': [16, 16],
     'VGG_PONG_LAYERNECK': [16, 32],
     'VGG_PONG_LD': [16, 32, 32, 16],
+    'MAPPER': [8, 8],
 }

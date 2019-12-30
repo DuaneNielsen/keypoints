@@ -65,3 +65,19 @@ def test_pong_fill():
         else:
             plt.imshow(img1, cmap='gray', vmin=0, vmax=256.0)
             plt.show()
+
+
+def plot_heatmap2d(z, title):
+    # show height map in 2d
+    plt.figure()
+    plt.title(title)
+    p = plt.imshow(z.detach().numpy())
+    plt.colorbar(p)
+    plt.show()
+
+
+def test_mapper():
+    ds = d.MapperDataset(16, 16, 3, 10)
+    x, y = ds[0]
+    plot_heatmap2d(x[0], 'point function')
+    plot_heatmap2d(y[0], 'target function')

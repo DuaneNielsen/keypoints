@@ -14,6 +14,7 @@ import gym
 import skimage.measure
 from tqdm import tqdm
 from random import randint
+import models.functional as MF
 
 Pos = collections.namedtuple('Pos', 'x, y')
 
@@ -158,6 +159,26 @@ class AtariDataset(torch.utils.data.dataset.Dataset):
         if self.transforms is not None:
             t, t1 = self.transforms(t), self.transforms(t1)
         return t, t1
+
+
+class MapperDataset(torch.utils.data.dataset.Dataset):
+    def __init__(self, height, width, keypoints, length):
+        super().__init__()
+        self.height = height
+        self.width = width
+        self.keypoints = keypoints
+        self.length = length
+
+    def __getitem__(self, item):
+        kp = torch.rand(1, self.keypoints, 2)
+        pointmap = MF.point_map(kp, self.height, self.width)
+        mask = MF.gaussian_like_function(kp, self.height, self.width)
+        mask, _ = torch.max(mask, dim=1, keepdim=True)
+        return pointmap.squeeze(0), mask.squeeze(0)
+
+    def __len__(self):
+        return self.length
+
 
 
 def random_split(dataset, lengths):

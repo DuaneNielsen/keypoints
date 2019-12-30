@@ -151,7 +151,7 @@ def test_plot_gaussian_function():
     kp = torch.randn(1, 1, 2, requires_grad=True) * sigma + mu
     z = MF.gaussian_like_function(kp, 14, 14, sigma=0.1).squeeze().detach().numpy()
 
-    plot_heightmap3d(z)
+    #plot_heightmap3d(z)
     plot_heatmap2d(z)
 
 

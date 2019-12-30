@@ -51,8 +51,15 @@ if __name__ == '__main__':
     keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core)
     keymapper = knn.GaussianLike(sigma=0.1)
+    #mapper_core = vgg.make_layers(vgg.vgg_cfg['MAPPER'])
+    #mapper_u = knn.Unit(args.model_keypoints, 1, mapper_core)
+    #mapper = transporter.TransporterMap(mapper=mapper_u)
+    #mapper.load('data/models/mapper/MAPPER/run_1/best')
+    #keymapper = transporter.MaskMaker(mapper)
+    for p in keymapper.parameters(recurse=True):
+        p.requires_grad = False
     transporter_net = transporter.TransporterNet(encoder, keypoint, keymapper, decoder, init_weights=True,
-                                                 combine_method='squash_and_clip')
+                                                 combine_method='max')
     transporter_net = transporter_net.to(args.device)
 
     if args.load is not None:
@@ -65,7 +72,7 @@ if __name__ == '__main__':
 
     """ apex mixed precision """
     if args.device != 'cpu':
-        model, optimizer = amp.initialize(transporter_net, optim, opt_level=args.opt_level)
+        amp.initialize(transporter_net, optim, opt_level=args.opt_level)
 
     """ loss function """
     def l2_reconstruction_loss(x, x_, loss_mask=None):
