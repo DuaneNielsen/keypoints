@@ -201,6 +201,16 @@ D_CELEBA = 'celeba'
 D_SQUARE = 'square'
 D_PONG = 'pong'
 
+pong_color_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+
+pong_grey_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5,), (0.5,))
+])
+
 
 def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
 
@@ -217,21 +227,13 @@ def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
     elif dataset == 'square':
         data = SquareDataset(size=200000, transform=transforms.ToTensor())
     elif dataset == 'pong':
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,))
-        ])
         data = AtariDataset('Pong-v0', total_len, pong_prepro,
                             end_trajectory=if_done,
-                            transforms=transform)
+                            transforms=pong_grey_transform)
     elif dataset == 'pong_color':
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
         data = AtariDataset('Pong-v0', total_len, pong_color_prepro,
                             end_trajectory=if_done,
-                            transforms=transform)
+                            transforms=pong_color_transform)
     else:
         raise ConfigException('pick a dataset')
 
