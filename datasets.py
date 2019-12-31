@@ -222,6 +222,7 @@ celeba_transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+
 transforms = {
     'celeba': celeba_transform,
     'pong': grey_transform,
@@ -233,6 +234,12 @@ prepro = {
     'pong': pong_prepro,
     'pong_color': pong_color_prepro,
     'pacman': pacman_color_prepro
+}
+
+env = {
+    'pong': 'Pong-v0',
+    'pong_color': 'Pong-v0',
+    'pacman': 'MsPacman-v0'
 }
 
 

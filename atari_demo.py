@@ -10,14 +10,14 @@ import time
 
 if __name__ == '__main__':
 
+    args = config.config()
+
     with torch.no_grad():
         v = UniImageViewer()
-        env = gym.make('Pong-v0')
+        env = gym.make(ds.env[args.dataset])
         s = env.reset()
         done = False
 
-        args = config.config()
-    
         nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
         encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
         encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
