@@ -43,7 +43,7 @@ http://github.com/NVIDIA/apex
 
 follow the apex readme to install
 
-####install celeba dataset
+### install celeba dataset
 
 learning keypoints on faces requires celeba dataset, download https://drive.google.com/open?id=0B7EVK8r0v71pZjFTYXZWM3FlRnM
 
