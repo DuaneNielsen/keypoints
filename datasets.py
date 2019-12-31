@@ -23,9 +23,6 @@ class ConfigException(Exception):
     pass
 
 
-""" dataset which generates a white square in the middle of color image """
-
-
 def square(offset, height):
     top_left = Pos(offset.x, offset.y)
     top_right = Pos(offset.x + height.x, offset.y)
@@ -53,6 +50,8 @@ def image(poly, screensize, color=(255, 255, 255)):
 
 
 class SquareDataset(torch.utils.data.dataset.Dataset):
+    """ generates a white square in the center of the image """
+
     def __init__(self, size, transform=None):
         super().__init__()
         self.size = size
@@ -75,7 +74,7 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
     s = s[34:168, :]
-    #s = skimage.measure.block_reduce(s, (4, 4), np.max)
+    # s = skimage.measure.block_reduce(s, (4, 4), np.max)
     s = cv2.resize(s, dsize=(32, 32), interpolation=cv2.INTER_AREA)
     return s
 
@@ -104,6 +103,17 @@ def if_done_or_nonzero_reward(done, r):
 class AtariDataset(torch.utils.data.dataset.Dataset):
     def __init__(self, env, size, prepro, max_frame_skip=20, min_frame_skip=5, transforms=None,
                  end_trajectory=if_done, skip_first=False):
+        """
+
+        :param env: gym env string
+        :param size: total length of dataset to generate
+        :param prepro: preprocessing function, numpy RGB input, numpy RGB output
+        :param max_frame_skip: when generating paired images, skip multiple frames up to max
+        :param min_frame_skip: skip multiple frames up to min
+        :param transforms: pytorch transform pipeline, takes in numpy RGB and returns tensor
+        :param end_trajectory: function that takes in done and reward for timestep and returns done flag
+        :param skip_first: skip the first episode
+        """
         super().__init__()
         self.loadbar = tqdm(total=size, desc='Loading trajectories from sim')
         self.prepro = prepro
@@ -186,7 +196,6 @@ class MapperDataset(torch.utils.data.dataset.Dataset):
         return self.length
 
 
-
 def random_split(dataset, lengths):
     r"""
     Randomly split a dataset into non-overlapping new datasets of given lengths.
@@ -199,18 +208,78 @@ def random_split(dataset, lengths):
         raise ValueError("Sum of input lengths is greater than the length of the input dataset!")
 
     indices = randperm(sum(lengths)).tolist()
-    return [torch.utils.data.Subset(dataset, indices[offset - length:offset]) for offset, length in zip(_accumulate(lengths), lengths)]
+    return [torch.utils.data.Subset(dataset, indices[offset - length:offset]) for offset, length in
+            zip(_accumulate(lengths), lengths)]
 
 
-D_CELEBA = 'celeba'
-D_SQUARE = 'square'
-D_PONG = 'pong'
-D_PONG_COLOR = 'pong_color'
+def split(data, train_len, test_len):
+    total_len = train_len + test_len
+    train = torch.utils.data.Subset(data, range(0, train_len))
+    test = torch.utils.data.Subset(data, range(train_len, total_len))
+    return train, test
+
+
+class DataPack(object):
+    def __init__(self):
+        self.name = None
+        self.transforms = None
+
+    def make(self, train_len, test_len, **kwargs):
+        pass
+
+
+class ImageDataPack(DataPack):
+    def __init__(self, name, subdir, transforms):
+        super().__init__()
+        self.name = name
+        self.transforms = transforms
+        self.subdir = subdir
+
+    def make(self, train_len, test_len, data_root='data', **kwargs):
+        """
+        Returns a test and training dataset
+        :param train_len: images in training set
+        :param test_len: images in test set
+        :param data_root: the the root directory for project datasets
+        :return:
+        """
+
+        data = tv.datasets.ImageFolder(str(Path(data_root) / Path(self.subdir)), transform=self.transforms, **kwargs)
+        return split(data, train_len, test_len)
+
+
+class AtariDataPack(DataPack):
+    def __init__(self, name, env, prepro, transforms):
+        super().__init__()
+        self.name = name
+        self.env = env
+        self.prepro = prepro
+        self.transforms = transforms
+
+    def make(self, train_len, test_len, *args, **kwargs):
+        total_len = train_len + test_len
+        data = AtariDataset(self.env, total_len, self.prepro,
+                            end_trajectory=if_done,
+                            transforms=self.transforms)
+        return random_split(data, (train_len, test_len))
+
+
+class SquareDataPack(DataPack):
+    def __init__(self):
+        super().__init__()
+        self.name = 'square'
+        self.transforms = transforms.ToTensor()
+
+    def make(self, train_len, test_len, *args, **kwargs):
+        total_len = train_len + test_len
+        data = SquareDataset(total_len, transform=self.transforms)
+        return split(data, train_len, test_len)
+
 
 color_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+])
 
 grey_transform = transforms.Compose([
     transforms.ToTensor(),
@@ -222,59 +291,10 @@ celeba_transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
-
-transforms = {
-    'celeba': celeba_transform,
-    'pong': grey_transform,
-    'pong_color': color_transform,
-    'pacman': color_transform,
+datasets = {
+    'celeba': ImageDataPack('celeba', 'celeba-low', celeba_transform),
+    'square': SquareDataPack(),
+    'pong': AtariDataPack('pong', 'Pong-v0', pong_prepro, grey_transform),
+    'pong_color': AtariDataPack('pong_color', 'Pong-v0', pong_color_prepro, color_transform),
+    'pacman': AtariDataPack('pacman', 'MsPacman-v0', pacman_color_prepro, color_transform)
 }
-
-prepro = {
-    'pong': pong_prepro,
-    'pong_color': pong_color_prepro,
-    'pacman': pacman_color_prepro
-}
-
-env = {
-    'pong': 'Pong-v0',
-    'pong_color': 'Pong-v0',
-    'pacman': 'MsPacman-v0'
-}
-
-
-def get_dataset(data_root, dataset, train_len, test_len, randomize=False):
-
-    total_len = train_len + test_len
-
-    if dataset == 'celeba':
-        path = Path(data_root + '/celeba-low')
-        """ celeba a transforms """
-        data = tv.datasets.ImageFolder(str(path), transform=transforms[dataset])
-    elif dataset == 'square':
-        data = SquareDataset(size=200000, transform=transforms.ToTensor())
-    elif dataset == 'pong':
-        data = AtariDataset('Pong-v0', total_len, prepro[dataset],
-                            end_trajectory=if_done,
-                            transforms=transforms[dataset])
-    elif dataset == 'pong_color':
-        data = AtariDataset('Pong-v0', total_len, prepro[dataset],
-                            end_trajectory=if_done,
-                            transforms=transforms[dataset])
-    elif dataset == 'pacman':
-        data = AtariDataset('MsPacman-v0', total_len, prepro[dataset],
-                            end_trajectory=if_done,
-                            transforms=transforms[dataset])
-    else:
-        raise ConfigException('pick a dataset')
-
-    if total_len > len(data):
-        raise ConfigException(f'total length in config is {total_len} but dataset has only {len(data)} entries')
-
-    if randomize:
-        train, test = random_split(data, (train_len, test_len))
-    else:
-        train = torch.utils.data.Subset(data, range(0, train_len))
-        test = torch.utils.data.Subset(data, range(train_len, total_len))
-
-    return train, test

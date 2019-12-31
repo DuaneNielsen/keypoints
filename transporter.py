@@ -1,16 +1,14 @@
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torch.optim import Adam
 
 from data_augments import TpsAndRotate, nop
-from models import vgg, transporter
+from models import transporter
 from utils import ResultsLogger
 from apex import amp
-from datasets import get_dataset
+import datasets as ds
 from config import config
-import models.knn as knn
 
 
 if __name__ == '__main__':
@@ -30,8 +28,8 @@ if __name__ == '__main__':
     display.header(args)
 
     """ dataset """
-    train, test = get_dataset(args.data_root, args.dataset,
-                              args.dataset_train_len, args.dataset_test_len, args.dataset_randomize)
+    datapack = ds.datasets[args.dataset]
+    train, test = datapack.make(args.dataset_train_len, args.dataset_test_len, data_root=args.data_root)
     pin_memory = False if args.device == 'cpu' else True
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=pin_memory)
@@ -43,29 +41,7 @@ if __name__ == '__main__':
         augment = nop
 
     """ model """
-    nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
-    encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
-    decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
-    decoder = knn.Unit(args.model_z_channels, args.model_in_channels, decoder_core)
-    keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core)
-    keymapper = knn.GaussianLike(sigma=0.1)
-    #mapper_core = vgg.make_layers(vgg.vgg_cfg['MAPPER'])
-    #mapper_u = knn.Unit(args.model_keypoints, 1, mapper_core)
-    #mapper = transporter.TransporterMap(mapper=mapper_u)
-    #mapper.load('data/models/mapper/MAPPER/run_1/best')
-    #keymapper = transporter.MaskMaker(mapper)
-    # for p in keymapper.parameters(recurse=True):
-    #     p.requires_grad = False
-    transporter_net = transporter.TransporterNet(encoder, keypoint, keymapper, decoder, init_weights=True,
-                                                 combine_method=args.transporter_combine_mode)
-    transporter_net = transporter_net.to(args.device)
-
-    if args.load is not None:
-        transporter_net.load(args.load)
-    if args.transfer_load is not None:
-        transporter_net.load_from_autoencoder(args.transfer_load)
+    transporter_net = transporter.make(args).to(args.device)
 
     """ optimizer """
     optim = Adam(transporter_net.parameters(), lr=1e-4)

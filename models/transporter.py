@@ -2,6 +2,7 @@ import torch
 from models import knn
 import torch.nn as nn
 import models.functional as MF
+import models.vgg as vgg
 
 
 class TransporterNet(knn.Container):
@@ -106,3 +107,23 @@ class TransporterMap(knn.Container):
 
     def save(self, directory):
         self.map.save(directory + '/map')
+
+
+def make(args):
+    nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
+    encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
+    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
+    decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
+    decoder = knn.Unit(args.model_z_channels, args.model_in_channels, decoder_core)
+    keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
+    keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core)
+    keymapper = knn.GaussianLike(sigma=0.1)
+    transporter_net = TransporterNet(encoder, keypoint, keymapper, decoder, init_weights=True,
+                                     combine_method=args.transporter_combine_mode)
+
+    if args.load is not None:
+        transporter_net.load(args.load)
+    if args.transfer_load is not None:
+        transporter_net.load_from_autoencoder(args.transfer_load)
+
+    return transporter_net

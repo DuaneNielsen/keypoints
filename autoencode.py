@@ -43,8 +43,8 @@ if __name__ == '__main__':
     global_step = 0
 
     """ data """
-    train, test = ds.get_dataset(args.data_root, args.dataset, args.dataset_train_len, args.dataset_test_len,
-                                 args.dataset_randomize)
+    datapack = ds.datasets[args.dataset]
+    train, test = datapack.make(args.dataset_train_len, args.dataset_test_len, data_root=args.data_root)
     train_l = DataLoader(train, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
     test_l = DataLoader(test, batch_size=args.batch_size, shuffle=True, drop_last=True, pin_memory=True)
 
