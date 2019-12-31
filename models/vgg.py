@@ -53,6 +53,7 @@ decoder_cfg = {
     'VGG_PONG_TRIVIAL': [16, 16],
     'VGG_PONG_LAYERNECK': [32, 32, 16, 16],
     'VGG_PACMAN': [16, 32, 32, 16],
+    'VGG_PACMAN_2': [64, 'U', 32, 32, 16],
 }
 
 vgg_cfg = {
@@ -65,5 +66,6 @@ vgg_cfg = {
     'VGG_PONG_TRIVIAL': [16, 16],
     'VGG_PONG_LAYERNECK': [16, 32],
     'VGG_PACMAN': [16, 32, 32, 16],
+    'VGG_PACMAN_2': [16, 32, 32, 'M', 64],
     'MAPPER': [8, 8],
 }

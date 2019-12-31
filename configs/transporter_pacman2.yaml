@@ -1,0 +1,16 @@
+checkpoint_freq: 1000
+
+model_type: VGG_PACMAN_2
+model_in_channels: 3
+model_z_channels : 64
+model_keypoints : 5
+
+dataset: pacman
+dataset_train_len: 60000
+dataset_test_len: 3000
+dataset_randomize: True
+data_aug_type: None
+
+batch_size: 32
+epochs: 300
+opt_level: O2
