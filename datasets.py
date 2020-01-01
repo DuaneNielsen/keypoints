@@ -71,6 +71,10 @@ class SquareDataset(torch.utils.data.dataset.Dataset):
 """ Atari dataset generator """
 
 
+def nop(s):
+    return s
+
+
 def pong_prepro(s):
     s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)
     s = s[34:168, :]
@@ -249,12 +253,13 @@ class ImageDataPack(DataPack):
 
 
 class AtariDataPack(DataPack):
-    def __init__(self, name, env, prepro, transforms):
+    def __init__(self, name, env, prepro, transforms, action_map):
         super().__init__()
         self.name = name
         self.env = env
         self.prepro = prepro
         self.transforms = transforms
+        self.action_map = action_map
 
     def make(self, train_len, test_len, *args, **kwargs):
         total_len = train_len + test_len
@@ -291,10 +296,37 @@ celeba_transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+
+class ActionMap(object):
+    def __init__(self, size, f=None):
+        super().__init__()
+        self.size = size
+        if f:
+            self.f = f
+        else:
+            self.f = lambda a: a
+
+    def __call__(self, a):
+        return self.f(a)
+
+
+def pong_action_map(a):
+    return a + 2
+
+
+def pacman_action_map(a):
+    return a + 1
+
+
+def box2d_discrete(a):
+    return a.item()
+
+
 datasets = {
     'celeba': ImageDataPack('celeba', 'celeba-low', celeba_transform),
     'square': SquareDataPack(),
-    'pong': AtariDataPack('pong', 'Pong-v0', pong_prepro, grey_transform),
-    'pong_color': AtariDataPack('pong_color', 'Pong-v0', pong_color_prepro, color_transform),
-    'pacman': AtariDataPack('pacman', 'MsPacman-v0', pacman_color_prepro, color_transform)
+    'pong': AtariDataPack('pong', 'Pong-v0', pong_prepro, grey_transform, ActionMap(2, pong_action_map)),
+    'pong_color': AtariDataPack('pong_color', 'Pong-v0', pong_color_prepro, color_transform, ActionMap(2, pong_action_map)),
+    'pacman': AtariDataPack('pacman', 'MsPacman-v0', pacman_color_prepro, color_transform, ActionMap(4, pacman_action_map)),
+    'cartpole': AtariDataPack('cartpole', 'CartPole-v0', nop, torch.from_numpy, ActionMap(2, box2d_discrete))
 }

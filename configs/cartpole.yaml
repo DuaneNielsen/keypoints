@@ -1,0 +1,3 @@
+model_type: nop
+dataset: cartpole
+policy_inputs: 4
