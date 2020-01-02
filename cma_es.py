@@ -11,6 +11,7 @@ from torch.distributions.categorical import Categorical
 from utils import UniImageViewer, plot_keypoints_on_image
 from torch import nn
 from torch.nn.functional import softmax
+from higgham import isPD, np_nearestPD
 
 
 def get_action(s, prepro, transform, view, policy, action_map):
@@ -93,6 +94,7 @@ if __name__ == '__main__':
     size = policy_features * actions
     m = torch.zeros(size, device=args.device, dtype=torch.float)
     step = torch.ones(size, device=args.device, dtype=torch.float)
+    #step += torch.randn_like(step) * 0.1
     c = torch.eye(size, device=args.device)
 
     best_reward = -50000.0
@@ -130,24 +132,30 @@ if __name__ == '__main__':
         g = g - m
         c = (g.T.matmul(g) / g.size(0))
 
-        try:
-            torch.cholesky(c)
-        except Exception:
-            # fix it so we have positive definite matrix
-            # could also use the Higham algorithm for more accuracy
-            #  N.J. Higham, "Computing a nearest symmetric positive semidefinite
-            # https://gist.github.com/fasiha/fdb5cec2054e6f1c6ae35476045a0bbd
-            print('covariance matrix not positive definite, attempting recovery')
-            e, v = torch.symeig(c, eigenvectors=True)
-            eps = 1e-6
-            e[e < eps] = eps
-            c = torch.matmul(v, torch.matmul(e.diag_embed(), v.T))
-            try:
-                torch.cholesky(c)
-            except Exception:
-                print('covariance matrix not positive definite, discarding run')
-                m = m_p
-                c = c_p
+        if not isPD(c):
+            c_np = c.cpu().numpy()
+            print(c_np)
+            c_np = np_nearestPD(c_np)
+            c = torch.from_numpy(c_np).to(dtype=c.dtype).to(args.device)
 
+        # try:
+        #     torch.cholesky(c)
+        # except Exception:
+        #     # fix it so we have positive definite matrix
+        #     # could also use the Higham algorithm for more accuracy
+        #     #  N.J. Higham, "Computing a nearest symmetric positive semidefinite
+        #     # https://gist.github.com/fasiha/fdb5cec2054e6f1c6ae35476045a0bbd
+        #     print('covariance matrix not positive definite, attempting recovery')
+        #     e, v = torch.symeig(c, eigenvectors=True)
+        #     eps = 1e-6
+        #     e[e < eps] = eps
+        #     c = torch.matmul(v, torch.matmul(e.diag_embed(), v.T))
+        #     try:
+        #         torch.cholesky(c)
+        #     except Exception:
+        #         print('covariance matrix not positive definite, discarding run')
+        #         m = m_p
+        #         c = c_p
+        #
 
 
