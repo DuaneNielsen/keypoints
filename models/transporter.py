@@ -63,10 +63,10 @@ class TransporterNet(knn.Container):
 
         return x_t, phi_xs, k_xt, m_xt, p_xt, heatmap_xt, mask_xs, mask_xt
 
-    def load(self, directory):
-        self.feature.load(directory + '/encoder')
-        self.keypoint.load(directory + '/keypoint')
-        self.decoder.load(directory + '/decoder')
+    def load(self, directory, map_device=None):
+        self.feature.load(directory + '/encoder', map_device=map_device)
+        self.keypoint.load(directory + '/keypoint', map_device=map_device)
+        self.decoder.load(directory + '/decoder', map_device=map_device)
 
     def load_from_autoencoder(self, directory):
         self._initialize_weights()
@@ -109,7 +109,7 @@ class TransporterMap(knn.Container):
         self.map.save(directory + '/map')
 
 
-def make(args):
+def make(args, map_device=None):
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
@@ -122,7 +122,7 @@ def make(args):
                                      combine_method=args.transporter_combine_mode)
 
     if args.load is not None:
-        transporter_net.load(args.load)
+        transporter_net.load(args.load, map_device)
     if args.transfer_load is not None:
         transporter_net.load_from_autoencoder(args.transfer_load)
 

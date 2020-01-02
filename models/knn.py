@@ -145,22 +145,26 @@ class Unit(nn.Module):
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(block.state_dict(), str(path))
 
-    def _load_block(self, directory, unit, block):
+    def _load_block(self, directory, unit, block, map_device=None):
         path = Path(f'{directory}/{unit}.mdl')
-        block.load_state_dict(torch.load(str(path)))
+        if map_device:
+            f = torch.load(str(path), map_device)
+            block.load_state_dict(f)
+        else:
+            block.load_state_dict(torch.load(str(path)))
 
     def save(self, directory):
         self._save_block(directory, 'in_block', self.in_block)
         self._save_block(directory, 'core', self.core)
         self._save_block(directory, 'out_block', self.out_block)
 
-    def load(self, directory, in_block=True, core=True, out_block=True):
+    def load(self, directory, in_block=True, core=True, out_block=True, map_device=None):
         if in_block:
-            self._load_block(directory, 'in_block', self.in_block)
+            self._load_block(directory, 'in_block', self.in_block, map_device=map_device)
         if core:
-            self._load_block(directory, 'core', self.core)
+            self._load_block(directory, 'core', self.core, map_device=map_device)
         if out_block:
-            self._load_block(directory, 'out_block', self.out_block)
+            self._load_block(directory, 'out_block', self.out_block, map_device=map_device)
 
 
 class FeatureBlock(nn.Module):
