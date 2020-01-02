@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from numpy import linalg as la
 
+
 def np_nearestPD(A):
     """Find the nearest positive-definite matrix to input
     A Python/Numpy port of John D'Errico's `nearestSPD` MATLAB code [1], which
@@ -44,6 +45,7 @@ def np_nearestPD(A):
 
     return A3
 
+
 def np_isPD(B):
     """Returns true when input is positive-definite, via Cholesky"""
     try:
@@ -51,6 +53,7 @@ def np_isPD(B):
         return True
     except la.LinAlgError:
         return False
+
 
 def isPD(A):
     try:
@@ -61,6 +64,7 @@ def isPD(A):
 
 
 def nearestPD(A):
+    """ dont use this it doesn't work"""
     B = A + A.T / 2
     u, s, v = torch.svd(B)
     H = torch.matmul(v.T, torch.matmul(s.diag_embed(), v))
@@ -82,6 +86,7 @@ def nearestPD(A):
 
 
 def nearestPDHack(c):
+    """ this probably kinda works but is really slow"""
     eps = torch.finfo(c.dtype).eps
     k = 1
     while not isPD(c):

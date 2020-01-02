@@ -129,8 +129,8 @@ if __name__ == '__main__':
         c_p = c.clone()
 
         m = g.mean(0)
-        g = g - m
-        c = (g.T.matmul(g) / g.size(0))
+        g = g - m_p
+        c = (g.T.matmul(g) / (g.size(0)))
 
         if not isPD(c):
             c_np = c.cpu().numpy()
