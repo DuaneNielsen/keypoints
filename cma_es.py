@@ -188,8 +188,10 @@ if __name__ == '__main__':
         g = g - m_p
         c = (g.T.matmul(g) / (g.size(0)))
         covariance_discount = num_candidates // 4 / m.size(0) ** 2
-        print(covariance_discount)
         c = (1 - covariance_discount) * c_p + covariance_discount * c
+
+        # make matrix positive definite or symeig will not like it
+        c = torch.from_numpy(np_nearestPD(c.cpu().numpy())).to(args.device)
 
         d, b = c.symeig(True)
         d = d.diag_embed()
