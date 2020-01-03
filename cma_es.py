@@ -16,7 +16,7 @@ from tqdm import trange
 from torch.utils.tensorboard import SummaryWriter
 from statistics import mean
 from pathlib import Path
-
+from numpy import linalg as la
 
 
 def make_args(args, datapack, weights, policy_features, actions, render=False):
@@ -191,10 +191,13 @@ if __name__ == '__main__':
         c = (1 - covariance_discount) * c_p + covariance_discount * c
 
         # make matrix positive definite or symeig will not like it
-        c = torch.from_numpy(np_nearestPD(c.cpu().numpy())).to(args.device)
+        # c = torch.from_numpy(np_nearestPD(c.cpu().numpy())).to(args.device)
 
-        d, b = c.symeig(True)
-        d = d.diag_embed()
+        #d, b = c.symeig(True)
+        d, b = la.eigh(c.cpu().numpy())
+        d, b = torch.from_numpy(d).to(args.device), torch.from_numpy(b).to(args.device)
+        # check this is correct
+        d = d.sqrt().diag_embed()
 
         global_step += 1
 
