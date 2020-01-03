@@ -98,6 +98,14 @@ def nop(s_t):
     return s_t
 
 
+def sample(n, mean, B, D):
+    features = mean.size(0)
+    z = torch.randn(features, n, device=mean.device, dtype=mean.dtype)
+    s = mean.view(-1, 1) + B.matmul(D.matmul(z))
+    s = s.T
+    return s
+
+
 if __name__ == '__main__':
     mp.set_start_method('spawn')
     """ CMA - ES algorithm
@@ -127,9 +135,11 @@ if __name__ == '__main__':
     # meaning at least one x will be linear in the other
     num_candidates = 16
     size = policy_features * actions
-    m = torch.zeros(size, device=args.device, dtype=torch.float)
-    step = torch.ones(size, device=args.device, dtype=torch.float)
+    m = torch.zeros(size, device=args.device)
+    step = torch.ones(size, device=args.device)
     c = torch.eye(size, device=args.device)
+    b = torch.eye(size, device=args.device) # rotation covariance
+    d = torch.eye(size, device=args.device) # scale covariance
 
     best_reward = -50000.0
 
@@ -140,10 +150,7 @@ if __name__ == '__main__':
 
     for _ in trange(2000):
 
-        dist = MultivariateNormal(m, c)
-        candidates = dist.sample((num_candidates,)).to('cpu')
-        generation = []
-
+        candidates = sample(num_candidates, m, b, d)
         weights = torch.unbind(candidates, dim=0)
 
         worker_args = [make_args(args, datapack, w, policy_features, actions, False) for w in weights]
@@ -151,6 +158,7 @@ if __name__ == '__main__':
         with mp.Pool(processes=args.processes) as pool:
             results = pool.map(multi_evaluate, worker_args)
 
+        generation = []
         for i in range(len(results)):
             generation.append({'weights': weights[i], 'reward': results[i]})
 
@@ -184,32 +192,11 @@ if __name__ == '__main__':
         print(covariance_discount)
         c = (1 - covariance_discount) * c_p + covariance_discount * c
 
-        if not isPD(c):
-            c_np = c.cpu().numpy()
-            print(c_np)
-            c_np = np_nearestPD(c_np)
-            c = torch.from_numpy(c_np).to(dtype=c.dtype).to(args.device)
+        d, b = c.symeig(True)
+        d = d.diag_embed()
 
         global_step += 1
 
-        # try:
-        #     torch.cholesky(c)
-        # except Exception:
-        #     # fix it so we have positive definite matrix
-        #     # could also use the Higham algorithm for more accuracy
-        #     #  N.J. Higham, "Computing a nearest symmetric positive semidefinite
-        #     # https://gist.github.com/fasiha/fdb5cec2054e6f1c6ae35476045a0bbd
-        #     print('covariance matrix not positive definite, attempting recovery')
-        #     e, v = torch.symeig(c, eigenvectors=True)
-        #     eps = 1e-6
-        #     e[e < eps] = eps
-        #     c = torch.matmul(v, torch.matmul(e.diag_embed(), v.T))
-        #     try:
-        #         torch.cholesky(c)
-        #     except Exception:
-        #         print('covariance matrix not positive definite, discarding run')
-        #         m = m_p
-        #         c = c_p
-        #
+
 
 
