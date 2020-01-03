@@ -23,6 +23,7 @@ def config():
     parser.add_argument('--data_root', type=str, default='data')
     parser.add_argument('--config', type=str, default=None)
     parser.add_argument('--epochs', type=int, default=800)
+    parser.add_argument('--processes', type=int)
 
     """ visualization params """
     parser.add_argument('--display', action='store_true')

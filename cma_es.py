@@ -3,7 +3,6 @@ from models import transporter
 from models import functional as KF
 import torch
 import config
-from tqdm import tqdm
 import datasets as ds
 from torchvision.transforms import functional as TVF
 from torch.distributions.multivariate_normal import MultivariateNormal
@@ -13,8 +12,10 @@ from torch import nn
 from torch.nn.functional import softmax
 from higgham import isPD, np_nearestPD
 import multiprocessing as mp
-import multiprocessing.spawn
-
+from tqdm import trange
+from torch.utils.tensorboard import SummaryWriter
+from statistics import mean
+from pathlib import Path
 
 
 
@@ -37,8 +38,6 @@ def multi_evaluate(arg_dict):
 
 def evaluate(args, env, policy, render=False):
     with torch.no_grad():
-
-        print('starting eval')
 
         def get_action(s, prepro, transform, view, policy, action_map, device):
             s = prepro(s)
@@ -81,8 +80,6 @@ def evaluate(args, env, policy, render=False):
                 else:
                    env.render()
 
-        print('eval complete')
-
     return reward
 
 
@@ -113,6 +110,10 @@ if __name__ == '__main__':
 
     args = config.config()
 
+    log_dir = f'data/cma_es/{args.run_id}/'
+    tb = SummaryWriter(log_dir)
+    global_step = 0
+
     if args.model_keypoints:
         policy_features = args.model_keypoints * 2
     else:
@@ -134,10 +135,10 @@ if __name__ == '__main__':
 
     if args.demo:
         while True:
-            policy = torch.load('best_of_generation.pt')['weights'].reshape(policy_features, actions)
+            policy = torch.load(log_dir + 'best_of_generation.pt')['weights'].reshape(policy_features, actions)
             evaluate(args, env, policy, True)
 
-    for _ in range(500):
+    for _ in trange(2000):
 
         dist = MultivariateNormal(m, c)
         candidates = dist.sample((num_candidates,)).to('cpu')
@@ -147,20 +148,24 @@ if __name__ == '__main__':
 
         worker_args = [make_args(args, datapack, w, policy_features, actions, False) for w in weights]
 
-        with mp.Pool(processes=8) as pool:
+        with mp.Pool(processes=args.processes) as pool:
             results = pool.map(multi_evaluate, worker_args)
 
         for i in range(len(results)):
             generation.append({'weights': weights[i], 'reward': results[i]})
 
-        # get the fittest half
+        # get the fittest 25 %
         generation = sorted(generation, key=lambda x: x['reward'], reverse=True)
         print([candidate['reward'] for candidate in generation])
 
         # if this is the best, save and show it
         best_of_generation = generation[0]
+        tb.add_scalar('gen/gen_mean', mean(results), global_step)
+        tb.add_scalar('gen/gen_best', best_of_generation['reward'], global_step)
+        tb.add_scalar('gen/gen_mean_selected', mean(results[0:num_candidates // 4]), global_step)
+
         if best_of_generation['reward'] > best_reward:
-            torch.save(best_of_generation, 'best_of_generation.pt')
+            torch.save(best_of_generation, log_dir + 'best_of_generation.pt')
             best_reward = best_of_generation['reward']
             policy = best_of_generation['weights'].reshape(policy_features, actions).to(args.device)
             evaluate(args, env, policy, args.display)
@@ -184,6 +189,8 @@ if __name__ == '__main__':
             print(c_np)
             c_np = np_nearestPD(c_np)
             c = torch.from_numpy(c_np).to(dtype=c.dtype).to(args.device)
+
+        global_step += 1
 
         # try:
         #     torch.cholesky(c)

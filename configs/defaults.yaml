@@ -4,3 +4,4 @@ display_kp_rows: 4
 display_freq: 5000
 
 transporter_combine_mode: max
+processes: 8
