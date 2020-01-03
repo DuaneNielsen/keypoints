@@ -195,7 +195,7 @@ if __name__ == '__main__':
 
         d, b = c.symeig(True)
         #d, b = la.eigh(c.cpu().numpy())
-        d, b = torch.from_numpy(d).to(args.device), torch.from_numpy(b).to(args.device)
+        #d, b = torch.from_numpy(d).to(args.device), torch.from_numpy(b).to(args.device)
         d = d.sqrt().diag_embed()
 
         global_step += 1
