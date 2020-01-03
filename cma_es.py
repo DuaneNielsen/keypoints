@@ -102,8 +102,7 @@ def sample(n, mean, B, D):
     features = mean.size(0)
     z = torch.randn(features, n, device=mean.device, dtype=mean.dtype)
     s = mean.view(-1, 1) + B.matmul(D.matmul(z))
-    s = s.T
-    return s
+    return s.T
 
 
 if __name__ == '__main__':
@@ -148,7 +147,7 @@ if __name__ == '__main__':
             policy = torch.load(log_dir + 'best_of_generation.pt')['weights'].reshape(policy_features, actions)
             evaluate(args, env, policy, True)
 
-    for _ in trange(2000):
+    for _ in trange(args.epochs):
 
         candidates = sample(num_candidates, m, b, d)
         weights = torch.unbind(candidates, dim=0)
