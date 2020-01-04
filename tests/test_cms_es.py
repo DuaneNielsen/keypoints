@@ -4,6 +4,7 @@ import torch
 import cma_es
 from matplotlib.patches import Ellipse
 from math import cos, sin, acos, degrees
+import time
 
 def objective(x, y):
     return 1 / ((x * 2.0 + 0.3) ** 2 + (y * 2.0 + 0.4) ** 2).sqrt()
@@ -21,15 +22,19 @@ def test_plot_objective():
     plt.show()
 
 
-def plot_heatmap(samples, mean, b, d):
+def plot_heatmap(title, count, mean, b, d, samples=None, g=None):
     axis_scale = 1.2
     x_, y_, = torch.linspace(-1, 1, 100), torch.linspace(-1, 1, 100)
     x, y = torch.meshgrid([x_, y_])
     z = objective(x, y)
     fig = plt.figure()
+    fig.suptitle(f'{title} {count}', fontsize=16)
     ax2 = fig.add_subplot(111)
     ax2.contour(x, y, z, cmap='hot')
-    ax2.scatter(samples[:, 0], samples[:, 1])
+    if samples is not None:
+        ax2.scatter(samples[:, 0], samples[:, 1], color='blue')
+    if g is not None:
+        ax2.scatter(g[:, 0], g[:, 1], color='red')
 
     trans = torch.tensor([
         [1.0, 0, mean[0]],
@@ -38,8 +43,8 @@ def plot_heatmap(samples, mean, b, d):
     ])
 
     x_unit = torch.tensor([
-            [0, 1.0],
-            [0, 0],
+            [0.0, 1.0],
+            [0.0, 0],
     ])
 
     y_unit = torch.tensor([
@@ -55,10 +60,13 @@ def plot_heatmap(samples, mean, b, d):
     unit = torch.cat((unit, torch.ones(2, 1, 2)), dim=1)
     unit = trans.matmul(unit)
 
-    ax2.scatter(mean[0], mean[1], color='red')
+    ax2.scatter(mean[0], mean[1], color='green')
 
-    ax2.plot(unit[0, 0], unit[0, 1])
-    ax2.plot(unit[1, 0], unit[1, 1])
+    xunit_x, xunit_y = unit[0, 0], unit[0, 1]
+    yunit_x, yunit_y = unit[1, 0], unit[1, 1]
+
+    ax2.plot(xunit_x, xunit_y)
+    ax2.plot(yunit_x, yunit_y)
 
     covar = Ellipse(xy=(mean[0], mean[1]), width=d[0, 0] * 2, height=d[1, 1] * 2, angle=-degrees(theta), alpha=0.2)
     ax2.add_artist(covar)
@@ -71,23 +79,28 @@ def plot_heatmap(samples, mean, b, d):
 def test_sampler():
     features = 2
     samples = 16
-    step_size = 0.3
+    step_size = 1.0
 
     mean = torch.zeros(features)
     b = torch.eye(features)
     d = torch.eye(features)
 
-    s, z = cma_es.sample(samples, step_size, mean, b, d)
-    plot_heatmap(s, mean, b, d)
-    f = objective(s[:, 0], s[:, 1])
-    g = [{'sample': s[i], 'fitness':f.item()} for i, f in enumerate(f)]
-    g = sorted(g, key=lambda x: x['fitness'], reverse=True)
-    g = g[0:samples//4]
-    g = torch.stack([g['sample'] for g in g])
-    g = g - mean
-    mean = g.mean(0)
-    c = g.T.matmul(g)
-    d, b = torch.symeig(c, eigenvectors=True)
-    d = d.sqrt().diag_embed()
-    plot_heatmap(g, mean, b, d)
+    for counteval in range(4):
+        s, z = cma_es.sample(samples, step_size, mean, b, d)
+        f = objective(s[:, 0], s[:, 1])
+        g = [{'sample': s[i], 'fitness':f.item()} for i, f in enumerate(f)]
+        g = sorted(g, key=lambda x: x['fitness'], reverse=True)
+        g = g[0:samples//4]
+        g = torch.stack([g['sample'] for g in g])
+        plot_heatmap('sample ', counteval, mean, b, d, samples=s, g=g)
+        mean_old = mean.clone()
+        mean = g.mean(0)
+        g_raw = g.clone()
+        g = g - g.mean()
+        c = g.T.matmul(g) * 4 / samples
+        d, b = torch.symeig(c, eigenvectors=True)
+        d = d.sqrt().diag_embed()
+        plot_heatmap('select', counteval, mean, b, d, g=g_raw)
+        time.sleep(0.5)
+
 
