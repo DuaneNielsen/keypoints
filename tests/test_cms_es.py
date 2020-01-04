@@ -70,8 +70,12 @@ def plot_heatmap(title, count, mean, b, d, samples=None, g=None):
 
     covar = Ellipse(xy=(mean[0], mean[1]), width=d[0, 0] * 2, height=d[1, 1] * 2, angle=-degrees(theta), alpha=0.2)
     ax2.add_artist(covar)
-    ax2.set_xlim(-axis_scale, axis_scale)
-    ax2.set_ylim(-axis_scale, axis_scale)
+
+    xscale = max(xunit_y.abs().max().item(), yunit_x.abs().max().item())
+    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item())
+
+    ax2.set_xlim(-xscale + mean[0], xscale + mean[0])
+    ax2.set_ylim(-yscale + mean[1], yscale + mean[1])
     plt.gca().set_aspect('equal', adjustable='box')
     plt.show()
 
@@ -96,7 +100,7 @@ def test_sampler():
         mean_old = mean.clone()
         mean = g.mean(0)
         g_raw = g.clone()
-        g = g - g.mean()
+        g = g - mean_old
         c = g.T.matmul(g) * 4 / samples
         d, b = torch.symeig(c, eigenvectors=True)
         d = d.sqrt().diag_embed()
