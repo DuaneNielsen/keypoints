@@ -3,7 +3,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import torch
 import cma_es
 from matplotlib.patches import Ellipse
-from math import cos, sin, acos, degrees
+from math import cos, sin, acos, degrees, log, floor
 import time
 
 def objective(x, y):
@@ -85,10 +85,26 @@ def plot_heatmap(title, count, mean, b, d, samples=None, g=None):
 
 def test_sampler():
     features = 2
-    samples = 16
+
     step_size = 1.0
+    epochs = 1e3 * features ** 2
+
+    # selection settings
+    samples = 4 + floor(3 * log(features))
+    mu = samples / 2
+    weights = log(mu + 0.5) + torch.linspace(start=1, end=mu, steps=floor(mu)).log()
+    weights = torch.flip(weights, dims=(0,)) / weights.sum()
+    mu = floor(mu)
+    mueff = weights.sum() ** 2 / (weights ** 2).sum()
+
+    # adaptation settings
+    cmu = 0.3
+    plt.title('weights')
+    plt.plot(weights)
+    plt.show()
 
     mean = torch.zeros(features)
+    c = torch.eye(features)
     b = torch.eye(features)
     d = torch.eye(features)
 
@@ -97,14 +113,16 @@ def test_sampler():
         f = objective(s[:, 0], s[:, 1])
         g = [{'sample': s[i], 'fitness':f.item()} for i, f in enumerate(f)]
         g = sorted(g, key=lambda x: x['fitness'], reverse=True)
-        g = g[0:samples//4]
+        g = g[0:mu]
         g = torch.stack([g['sample'] for g in g])
         plot_heatmap('sample ', counteval, mean, b, d, samples=s, g=g)
         mean_prev = mean.clone()
+        c_prev = c.clone()
         g_raw = g.clone()
         mean = g.mean(0)
         g = g - mean_prev
         c = g.T.matmul(g) * 4 / samples
+        c = (1.0 - cmu) * c_prev + cmu * c
         d, b = torch.symeig(c, eigenvectors=True)
         d = d.sqrt().diag_embed()
         plot_heatmap('select', counteval, mean, b, d, g=g_raw)
