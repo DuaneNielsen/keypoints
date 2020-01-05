@@ -2,9 +2,10 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import torch
 import cma_es
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Circle
 from math import cos, sin, acos, degrees, log, floor, sqrt
 import time
+from torch.distributions import MultivariateNormal
 
 def objective(x, y):
     return 1 / ((x * 2.0 + 0.3) ** 2 + (y * 2.0 + 0.4) ** 2).sqrt()
@@ -22,13 +23,18 @@ def test_plot_objective():
     plt.show()
 
 
-def plot_heatmap(title, count, mean, b, d, samples=None, g=None):
+def plot_heatmap(title, count, mean, b, d, samples=None, g=None, chiN=None, step_size=None):
     axis_scale = 1.2
     x_, y_, = torch.linspace(-1, 1, 100), torch.linspace(-1, 1, 100)
     x, y = torch.meshgrid([x_, y_])
     z = objective(x, y)
     fig = plt.figure()
-    fig.suptitle(f'{title} {count}', fontsize=16)
+
+    if step_size is not None:
+        fig.suptitle(f'{title} {count} step_size: {step_size}', fontsize=16)
+    else:
+        fig.suptitle(f'{title} {count}', fontsize=16)
+
     ax2 = fig.add_subplot(111)
     ax2.contour(x, y, z, cmap='hot')
     if samples is not None:
@@ -70,6 +76,11 @@ def plot_heatmap(title, count, mean, b, d, samples=None, g=None):
 
     covar = Ellipse(xy=(mean[0], mean[1]), width=d[0, 0] * 2, height=d[1, 1] * 2, angle=-degrees(theta), alpha=0.2)
     ax2.add_artist(covar)
+
+    if chiN is not None:
+        radius = b.matmul(d.matmul(torch.eye(2) * chiN))[0, 0]
+        expected_norm = Circle(xy=(mean[0], mean[1]), radius=radius, alpha=0.1, color='yellow')
+        ax2.add_artist(expected_norm)
 
     max_g_x = g[:, 0].abs().max() if g is not None else 0
     max_g_y = g[:, 1].abs().max() if g is not None else 0
@@ -231,7 +242,29 @@ def test_rank_one_update():
         time.sleep(0.5)
 
 
-def test_rannk_mu_and_rank_one_update():
+def expect_multivariate_norm(N):
+    return N ** 0.5 * (1 - 1 / (4 * N) + 1 / (21 * N ** 2))
+
+
+def test_expectation_multivariate_norm():
+
+    xrange = range(1, 50)
+    analyticE = [ expect_multivariate_norm(N) for N in range(1, 50)]
+
+    E = []
+    for N in xrange:
+        dist = MultivariateNormal(torch.zeros(N), torch.eye(N))
+        norms = []
+        for sample in dist.sample((100,)).unbind(0):
+            norms.append(sample.norm().item())
+        E.append(sum(norms)/100)
+
+    plt.plot(xrange, E)
+    plt.plot(xrange, analyticE)
+    plt.show()
+
+
+def test_rank_mu_and_rank_one_update():
 
     features = 2
     step_size = 1.0
@@ -262,8 +295,11 @@ def test_rannk_mu_and_rank_one_update():
     # cmu = 2 * (mueff - 2 + 1 / mueff) / ((features + 2)**2 + 2 * mueff / 2)
     cmu = 0.3
     damps = 1 + 2 * max(0.0, sqrt((mueff - 1.0) / (features + 1)) -1 ) + cs
+    damps = 1.0
+    chiN = expect_multivariate_norm(features)
 
-    print(f'cc : {cc}, cs: {cs}, c1: {c1}, cmu: {cmu}, damps: {damps}')
+    print(f'cc : {cc}, cs: {cs}, c1: {c1}, cmu: {cmu}, damps: {damps}, chiN:{chiN}')
+
 
     plt.title('weights')
     plt.plot(weights)
@@ -275,6 +311,7 @@ def test_rannk_mu_and_rank_one_update():
     c = torch.matmul(b.matmul(d), b.matmul(d).T)
 
     pc = torch.zeros(features)
+    ps = torch.zeros(features)
 
     for counteval in range(8):
 
@@ -290,6 +327,7 @@ def test_rannk_mu_and_rank_one_update():
         g = torch.stack([g['sample'] for g in g])
         plot_heatmap('sample ', counteval, mean, b, d, samples=s, g=g)
 
+        # backup
         mean_prev = mean.clone()
         c_prev = c.clone()
         g_raw = g.clone()
@@ -297,11 +335,16 @@ def test_rannk_mu_and_rank_one_update():
         mean = (g * weights.unsqueeze(1)).sum(0)
         zmean = (z * weights.unsqueeze(1)).sum(0)
 
+        # step size
+        ps = (1 - cs) * ps + cs * b.matmul(zmean)
+        step_size = step_size * (cs * ps.norm() / chiN - 1.0).exp()
+
         # a mind bending way to write a exponential smoothed moving average
         # zmean does not contain step size or mean, so allows us to add together
         # updates of different step sizes
         pc = (1 - cc) * pc + cc * b.matmul(d).matmul(zmean)
         # which we then combine to make a covariance matrix, from 1 (mean) datapoint!
+        # this is why it's called "rank 1" update
         cov_pc = pc.unsqueeze(1).matmul(pc.unsqueeze(1).t())
 
         # estimate cov for all selected samples (weighted by rank)
@@ -314,5 +357,104 @@ def test_rannk_mu_and_rank_one_update():
         # pull out the eigenthings and do the business
         d, b = torch.symeig(c, eigenvectors=True)
         d = d.sqrt().diag_embed()
-        plot_heatmap('select', counteval, mean, b, d, g=g_raw)
+        plot_heatmap('select', counteval, mean, b, d, g=g_raw, chiN=chiN)
         time.sleep(0.5)
+
+
+def test_rank_mu_and_rank_one_update_with_step_size_control():
+
+    features = 2
+    step_size = 1.0
+    epochs = 1e3 * features ** 2
+
+    # selection settings
+    samples = 4 + floor(3 * log(features))
+    mu = samples / 2
+    weights = log(mu + 0.5) + torch.linspace(start=1, end=mu, steps=floor(mu)).log()
+    weights = torch.flip(weights, dims=(0,)) / weights.sum()
+    mu = floor(mu)
+    mueff = (weights.sum() ** 2 / (weights ** 2).sum()).item()
+
+    '''
+    cc = (4 + mueff / N) / (N + 4 + 2 * mueff / N);
+    cs = (mueff + 2) / (N + mueff + 5);
+    c1 = 2 / ((N + 1.3)ˆ2+mueff);
+    cmu = 2 * (mueff - 2 + 1 / mueff) / ((N + 2)ˆ2+2 * mueff / 2);
+    damps = 1 + 2 * max(0, sqrt((mueff - 1) / (N + 1)) - 1) + cs;
+    '''
+
+    # adaptation settings
+    #cmu = mueff / features ** 2
+    cc = (4 + mueff/features) / (features+4 + 2 * mueff/features)
+    # cs = (mueff + 2) / (features + mueff + 5)
+    cs = 0.95
+    # c1 = 2 / ((features + 1.3) ** 2 + mueff)
+    c1 = 0.3
+    # cmu = 2 * (mueff - 2 + 1 / mueff) / ((features + 2)**2 + 2 * mueff / 2)
+    cmu = 0.3
+    damps = 1 + 2 * max(0.0, sqrt((mueff - 1.0) / (features + 1)) -1) + cs
+    damps = 1.0
+    chiN = expect_multivariate_norm(features)
+
+    print(f'cc : {cc}, cs: {cs}, c1: {c1}, cmu: {cmu}, damps: {damps}, chiN:{chiN}')
+
+
+    plt.title('weights')
+    plt.plot(weights)
+    plt.show()
+
+    mean = torch.zeros(features)
+    b = torch.eye(features)
+    d = torch.eye(features)
+    c = torch.matmul(b.matmul(d), b.matmul(d).T)
+
+    pc = torch.zeros(features)
+    ps = torch.zeros(features)
+
+    for counteval in range(8):
+
+        # sample parameters
+        s, z = cma_es.sample(samples, step_size, mean, b, d)
+
+        # rank by fitness
+        f = objective(s[:, 0], s[:, 1])
+        g = [{'sample': s[i], 'z': z[i], 'fitness':f.item()} for i, f in enumerate(f)]
+        g = sorted(g, key=lambda x: x['fitness'], reverse=True)
+        g = g[0:mu]
+        z = torch.stack([g['z'] for g in g])
+        g = torch.stack([g['sample'] for g in g])
+        plot_heatmap('sample ', counteval, mean, b, d, samples=s, g=g, chiN=chiN)
+
+        # backup
+        mean_prev = mean.clone()
+        c_prev = c.clone()
+        g_raw = g.clone()
+
+        mean = (g * weights.unsqueeze(1)).sum(0)
+        zmean = (z * weights.unsqueeze(1)).sum(0)
+
+        # step size
+        ps = (1 - cs) * ps + cs * b.matmul(zmean)
+        step_size = step_size * (ps.norm() / chiN - 1.0).exp()
+
+        # a mind bending way to write a exponential smoothed moving average
+        # zmean does not contain step size or mean, so allows us to add together
+        # updates of different step sizes
+        pc = (1 - cc) * pc + cc * b.matmul(d).matmul(zmean)
+        # which we then combine to make a covariance matrix, from 1 (mean) datapoint!
+        # this is why it's called "rank 1" update
+        cov_pc = pc.unsqueeze(1).matmul(pc.unsqueeze(1).t())
+
+        # estimate cov for all selected samples (weighted by rank)
+        bdz = b.matmul(d).matmul(z.t())
+        cmu_cov = torch.matmul(bdz, weights.diag_embed())
+        cmu_cov = cmu_cov.matmul(bdz.t())
+
+        c = (1.0 - c1 - cmu) * c_prev + c1 * cov_pc + cmu * cmu_cov
+
+        # pull out the eigenthings and do the business
+        d, b = torch.symeig(c, eigenvectors=True)
+        d = d.sqrt().diag_embed()
+        plot_heatmap('select', counteval, mean, b, d, g=g_raw, chiN=chiN, step_size=step_size)
+        time.sleep(0.5)
+
