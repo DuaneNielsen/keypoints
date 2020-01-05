@@ -71,8 +71,11 @@ def plot_heatmap(title, count, mean, b, d, samples=None, g=None):
     covar = Ellipse(xy=(mean[0], mean[1]), width=d[0, 0] * 2, height=d[1, 1] * 2, angle=-degrees(theta), alpha=0.2)
     ax2.add_artist(covar)
 
-    xscale = max(xunit_y.abs().max().item(), yunit_x.abs().max().item())
-    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item())
+    max_g_x = g[:, 0].abs().max() if g is not None else 0
+    max_g_y = g[:, 1].abs().max() if g is not None else 0
+
+    xscale = max(xunit_x.abs().max().item(), yunit_x.abs().max().item(), 0.3, max_g_x) * 1.1
+    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item(), 0.4, max_g_y) * 1.1
 
     ax2.set_xlim(-xscale + mean[0], xscale + mean[0])
     ax2.set_ylim(-yscale + mean[1], yscale + mean[1])
@@ -97,10 +100,10 @@ def test_sampler():
         g = g[0:samples//4]
         g = torch.stack([g['sample'] for g in g])
         plot_heatmap('sample ', counteval, mean, b, d, samples=s, g=g)
-        mean_old = mean.clone()
-        mean = g.mean(0)
+        mean_prev = mean.clone()
         g_raw = g.clone()
-        g = g - mean_old
+        mean = g.mean(0)
+        g = g - mean_prev
         c = g.T.matmul(g) * 4 / samples
         d, b = torch.symeig(c, eigenvectors=True)
         d = d.sqrt().diag_embed()
