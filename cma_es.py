@@ -102,7 +102,7 @@ def sample(n, sigma, mean, B, D):
     features = mean.size(0)
     z = torch.randn(features, n, device=mean.device, dtype=mean.dtype)
     s = mean.view(-1, 1) + sigma * B.matmul(D.matmul(z))
-    return s.T, z
+    return s.T, z.T
 
 
 def save_and_monitor():
