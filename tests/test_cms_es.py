@@ -486,7 +486,7 @@ from math import pi, e
 
 def akley(x, y):
     x, y = x + objective_mean[0], y + objective_mean[1]
-    return -20 * torch.exp(-0.2 * torch.sqrt(0.5 * (x**2 + y **2))) - \
+    return 20 * torch.exp(-0.2 * torch.sqrt(0.5 * (x**2 + y **2))) - \
            torch.exp(0.5 * (torch.cos(2*pi*x) + torch.cos(2*pi*y))) + e + 20
 
 def test_plot_akley():
@@ -610,7 +610,6 @@ def test_hyperparams():
         d = d.sqrt().diag_embed()
         if counteval % plot_freq == 0:
             plot_heatmap('select', counteval, mean, b, d, g=g_raw, chiN=chiN, step_size=step_size)
-            time.sleep(0.2)
 
     plt.title('step_size')
     plt.plot(step_size_l, label='step_size')
