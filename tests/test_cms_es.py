@@ -7,11 +7,14 @@ from math import cos, sin, acos, degrees, log, floor, sqrt
 import time
 from torch.distributions import MultivariateNormal
 
-def objective(x, y):
-    return 1 / ((x * 2.0 + 0.3) ** 2 + (y * 2.0 + 0.4) ** 2).sqrt()
+objective_mean = (1.0, 1.0)
 
 
-def test_plot_objective():
+def spike(x, y):
+    return 1 / ((x * 2.0 + objective_mean[0]) ** 2 + (y * 2.0 + objective_mean[1]) ** 2).sqrt()
+
+
+def plot_objective(objective):
     x_, y_, = torch.linspace(-1, 1, 100), torch.linspace(-1, 1, 100)
     x, y = torch.meshgrid([x_, y_])
     z = objective(x, y)
@@ -23,11 +26,15 @@ def test_plot_objective():
     plt.show()
 
 
-def plot_heatmap(title, count, mean, b, d, samples=None, g=None, chiN=None, step_size=None):
+def test_plot_spike():
+    plot_objective(spike)
+
+
+def plot_heatmap(title, count, mean, b, d, step_size=1.0, samples=None, g=None, chiN=None):
     axis_scale = 1.2
     x_, y_, = torch.linspace(-1, 1, 100), torch.linspace(-1, 1, 100)
     x, y = torch.meshgrid([x_, y_])
-    z = objective(x, y)
+    z = spike(x, y)
     fig = plt.figure()
 
     if step_size is not None:
@@ -74,7 +81,7 @@ def plot_heatmap(title, count, mean, b, d, samples=None, g=None, chiN=None, step
     ax2.plot(xunit_x, xunit_y)
     ax2.plot(yunit_x, yunit_y)
 
-    covar = Ellipse(xy=(mean[0], mean[1]), width=d[0, 0] * 2, height=d[1, 1] * 2, angle=-degrees(theta), alpha=0.2)
+    covar = Ellipse(xy=(mean[0], mean[1]), width=d[0, 0] * 2 * step_size, height=d[1, 1] * 2 * step_size, angle=-degrees(theta), alpha=0.2)
     ax2.add_artist(covar)
 
     if chiN is not None:
@@ -87,8 +94,8 @@ def plot_heatmap(title, count, mean, b, d, samples=None, g=None, chiN=None, step
     max_s_x = samples[:, 0].abs().max() if samples is not None else 0
     max_s_y = samples[:, 1].abs().max() if samples is not None else 0
 
-    xscale = max(xunit_x.abs().max().item(), yunit_x.abs().max().item(), 0.3, max_g_x, max_s_x) * 1.1
-    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item(), 0.4, max_g_y, max_s_y) * 1.1
+    xscale = max(xunit_x.abs().max().item(), yunit_x.abs().max().item(), 0.3, max_g_x, max_s_x, objective_mean[0]) * 1.1
+    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item(), 0.4, max_g_y, max_s_y, objective_mean[1]) * 1.1
 
     ax2.set_xlim(-xscale + mean[0], xscale + mean[0])
     ax2.set_ylim(-yscale + mean[1], yscale + mean[1])
@@ -128,7 +135,7 @@ def test_rank_mu_update():
         s, z = cma_es.sample(samples, step_size, mean, b, d)
 
         # rank by fitness
-        f = objective(s[:, 0], s[:, 1])
+        f = spike(s[:, 0], s[:, 1])
         g = [{'sample': s[i], 'z': z[i], 'fitness':f.item()} for i, f in enumerate(f)]
         g = sorted(g, key=lambda x: x['fitness'], reverse=True)
         g = g[0:mu]
@@ -204,7 +211,7 @@ def test_rank_one_update():
         s, z = cma_es.sample(samples, step_size, mean, b, d)
 
         # rank by fitness
-        f = objective(s[:, 0], s[:, 1])
+        f = spike(s[:, 0], s[:, 1])
         g = [{'sample': s[i], 'z': z[i], 'fitness':f.item()} for i, f in enumerate(f)]
         g = sorted(g, key=lambda x: x['fitness'], reverse=True)
         g = g[0:mu]
@@ -264,6 +271,22 @@ def test_expectation_multivariate_norm():
     plt.show()
 
 
+def test_expectation_my_multivariate_norm():
+
+    xrange = range(1, 50)
+    analyticE = [ expect_multivariate_norm(N) for N in range(1, 50)]
+
+    E = []
+    for N in xrange:
+        s, z = cma_es.sample(20, 1.0, torch.zeros(N), torch.eye(N), torch.eye(N))
+        E.append(sum([n.norm().item() for n in z.unbind(0)])/20)
+
+    plt.plot(xrange, E, label='empirical')
+    plt.plot(xrange, analyticE, label='analytic')
+    plt.legend(loc='upper  left')
+    plt.show()
+
+
 def test_rank_mu_and_rank_one_update():
 
     features = 2
@@ -274,7 +297,7 @@ def test_rank_mu_and_rank_one_update():
     samples = 4 + floor(3 * log(features))
     mu = samples / 2
     weights = log(mu + 0.5) + torch.linspace(start=1, end=mu, steps=floor(mu)).log()
-    weights = torch.flip(weights, dims=(0,)) / weights.sum()
+    weights = weights / weights.sum()
     mu = floor(mu)
     mueff = (weights.sum() ** 2 / (weights ** 2).sum()).item()
 
@@ -319,7 +342,7 @@ def test_rank_mu_and_rank_one_update():
         s, z = cma_es.sample(samples, step_size, mean, b, d)
 
         # rank by fitness
-        f = objective(s[:, 0], s[:, 1])
+        f = spike(s[:, 0], s[:, 1])
         g = [{'sample': s[i], 'z': z[i], 'fitness':f.item()} for i, f in enumerate(f)]
         g = sorted(g, key=lambda x: x['fitness'], reverse=True)
         g = g[0:mu]
@@ -371,7 +394,7 @@ def test_rank_mu_and_rank_one_update_with_step_size_control():
     samples = 4 + floor(3 * log(features))
     mu = samples / 2
     weights = log(mu + 0.5) + torch.linspace(start=1, end=mu, steps=floor(mu)).log()
-    weights = torch.flip(weights, dims=(0,)) / weights.sum()
+    weights = weights / weights.sum()
     mu = floor(mu)
     mueff = (weights.sum() ** 2 / (weights ** 2).sum()).item()
 
@@ -417,7 +440,7 @@ def test_rank_mu_and_rank_one_update_with_step_size_control():
         s, z = cma_es.sample(samples, step_size, mean, b, d)
 
         # rank by fitness
-        f = objective(s[:, 0], s[:, 1])
+        f = spike(s[:, 0], s[:, 1])
         g = [{'sample': s[i], 'z': z[i], 'fitness':f.item()} for i, f in enumerate(f)]
         g = sorted(g, key=lambda x: x['fitness'], reverse=True)
         g = g[0:mu]
@@ -435,7 +458,7 @@ def test_rank_mu_and_rank_one_update_with_step_size_control():
 
         # step size
         ps = (1 - cs) * ps + cs * b.matmul(zmean)
-        step_size = step_size * (ps.norm() / chiN - 1.0).exp()
+        step_size = step_size * ((cs / damps) * (ps.norm() / chiN - 1.0)).exp()
 
         # a mind bending way to write a exponential smoothed moving average
         # zmean does not contain step size or mean, so allows us to add together
@@ -458,3 +481,145 @@ def test_rank_mu_and_rank_one_update_with_step_size_control():
         plot_heatmap('select', counteval, mean, b, d, g=g_raw, chiN=chiN, step_size=step_size)
         time.sleep(0.5)
 
+from math import pi, e
+
+
+def akley(x, y):
+    x, y = x + objective_mean[0], y + objective_mean[1]
+    return -20 * torch.exp(-0.2 * torch.sqrt(0.5 * (x**2 + y **2))) - \
+           torch.exp(0.5 * (torch.cos(2*pi*x) + torch.cos(2*pi*y))) + e + 20
+
+def test_plot_akley():
+    plot_objective(akley)
+
+
+def test_hyperparams():
+
+    objective_f = akley
+
+    features = 2
+    step_size = 1.0
+    epochs = 1e3 * features ** 2
+
+    # selection settings
+    samples = 4 + floor(3 * log(features))
+    mu = samples / 2
+    weights = torch.tensor([log(mu + 0.5)]) - torch.linspace(start=1, end=mu, steps=floor(mu)).log()
+    weights = weights / weights.sum()
+    mu = floor(mu)
+    mueff = (weights.sum() ** 2 / (weights ** 2).sum()).item()
+
+    '''
+    cc = (4 + mueff / N) / (N + 4 + 2 * mueff / N);
+    cs = (mueff + 2) / (N + mueff + 5);
+    c1 = 2 / ((N + 1.3)ˆ2+mueff);
+    cmu = 2 * (mueff - 2 + 1 / mueff) / ((N + 2)ˆ2+2 * mueff / 2);
+    damps = 1 + 2 * max(0, sqrt((mueff - 1) / (N + 1)) - 1) + cs;
+    '''
+
+    # adaptation settings
+    cc = (4 + mueff/features) / (features+4 + 2 * mueff/features)
+    cs = (mueff + 2) / (features + mueff + 5)
+    c1 = 2 / ((features + 1.3) ** 2 + mueff)
+    cmu = 2 * (mueff - 2 + 1 / mueff) / ((features + 2)**2 + 2 * mueff / 2)
+    damps = 1 + 2 * max(0.0, sqrt((mueff - 1.0) / (features + 1)) -1) + cs
+    chiN = expect_multivariate_norm(features)
+
+    mean = torch.zeros(features)
+    b = torch.eye(features)
+    d = torch.eye(features)
+    c = torch.matmul(b.matmul(d), b.matmul(d).T)
+
+    pc = torch.zeros(features)
+    ps = torch.zeros(features)
+
+    print(f'mu: {mu}. mueff: {mueff}, cc : {cc}, cs: {cs}, c1: {c1}, cmu: {cmu}, damps: {damps}, chiN:{chiN}')
+
+    plt.title('weights')
+    plt.plot(weights)
+    print(weights)
+    plt.show()
+    step_size_l = [step_size]
+    correlation_l = [1.0]
+    ps_l = [ps[0].item()]
+    fitness_l = [0]
+    plot_freq = 1
+
+    for counteval in range(1, 10):
+
+        # sample parameters
+        s, z = cma_es.sample(samples, step_size, mean, b, d)
+
+        # rank by fitness
+        f = objective_f(s[:, 0], s[:, 1])
+        g = [{'sample': s[i], 'z': z[i], 'fitness':f.item()} for i, f in enumerate(f)]
+        g = sorted(g, key=lambda x: x['fitness'], reverse=True)
+        g = g[0:mu]
+        fitness_l.append(g[0]['fitness'])
+        z = torch.stack([g['z'] for g in g])
+        g = torch.stack([g['sample'] for g in g])
+
+        if counteval % plot_freq == 0:
+            plot_heatmap('sample ', counteval, mean, b, d, samples=s, g=g, chiN=chiN, step_size=step_size)
+
+        # backup
+        mean_prev = mean.clone()
+        prev_cov = c.clone()
+        g_raw = g.clone()
+
+        mean = (g * weights.unsqueeze(1)).sum(0)
+        zmean = (z * weights.unsqueeze(1)).sum(0)
+
+        # step size
+        ps = (1 - cs) * ps + sqrt(cs * (2.0 - cs)) * b.matmul(zmean)
+
+        correlation = ps.norm() / chiN
+        ps_l.append(ps[0].item())
+        correlation_l.append(correlation.item())
+
+        # delay the introduction of the rank 1 update
+        denominator = sqrt(1 - (1 - cs) ** (2 * counteval / samples))
+        threshold = 1.4e2 / features + 1
+        hsig = correlation / denominator < threshold
+        hsig = 1.0 if hsig else 0.0
+
+        #step_size = step_size * ((cs / damps) * (correlation - 1.0)).exp()
+        step_size = step_size * ((cs/damps) * (correlation - 1.0)).exp()
+
+        step_size_l.append(step_size)
+
+        # a mind bending way to write a exponential smoothed moving average
+        # zmean does not contain step size or mean, so allows us to add together
+        # updates of different step sizes
+        pc = (1 - cc) * pc + hsig * sqrt(cc*(2.0 - cc)*mueff) * b.matmul(d).matmul(zmean)
+        # which we then combine to make a covariance matrix, from 1 (mean) datapoint!
+        # this is why it's called "rank 1" update
+        pc_cov = pc.unsqueeze(1).matmul(pc.unsqueeze(1).t())
+        # mix back in the old covariance if hsig == 0
+        pc_cov = pc_cov + (1 - hsig) * cc * (2 - cc) * prev_cov
+
+        # estimate cov for all selected samples (weighted by rank)
+        bdz = b.matmul(d).matmul(z.t())
+        cmu_cov = torch.matmul(bdz, weights.diag_embed())
+        cmu_cov = cmu_cov.matmul(bdz.t())
+
+        c = (1.0 - c1 - cmu) * prev_cov + (c1 * pc_cov) + (cmu * cmu_cov)
+
+        # pull out the eigenthings and do the business
+        d, b = torch.symeig(c, eigenvectors=True)
+        d = d.sqrt().diag_embed()
+        if counteval % plot_freq == 0:
+            plot_heatmap('select', counteval, mean, b, d, g=g_raw, chiN=chiN, step_size=step_size)
+            time.sleep(0.2)
+
+    plt.title('step_size')
+    plt.plot(step_size_l, label='step_size')
+    plt.legend(loc='lower left')
+    plt.show()
+    plt.plot(correlation_l, label='correlation')
+    plt.legend(loc='lower left')
+    plt.show()
+    plt.plot(fitness_l, label='fitness')
+    plt.legend(loc='lower left')
+    plt.show()
+    plt.show()
