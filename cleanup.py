@@ -1,35 +1,37 @@
-from pathlib import Path
 from argparse import ArgumentParser
 import shutil
+from tensorboard.backend.event_processing.event_file_inspector import get_inspection_units, print_dict, get_dict_to_print
 
 """
 Deletes all folders with small tensorboard run files
 """
 
 parser = ArgumentParser('delete small runs')
-parser.add_argument('--minsize', type=int, default=18000)
-parser.add_argument('--list', type=bool, action='store_true')
+parser.add_argument('--logdir', type=str, default='.')
+parser.add_argument('--delete_smaller_than', type=int)
 args = parser.parse_args()
 
-files = list(Path('.').glob('*/events*.*'))
-rundirs = {}
+run_len = {}
+inspect_units = get_inspection_units(logdir=args.logdir)
 
-for file in files:
-    if file.parent in rundirs:
-        max_size_so_far = rundirs[file.parent].stat().st_size
-        if file.stat().st_size > max_size_so_far:
-            rundirs[file.parent] = file
+
+for run in inspect_units:
+    path = run[0]
+    max_length = 0
+    for key, value in get_dict_to_print(run.field_to_obs).items():
+        if value is not None:
+            length = value['max_step']
+            if max_length < length:
+                max_length = length
+    run_len[path] = max_length
+
+for run, length in run_len.items():
+    if args.delete_smaller_than is None:
+        print(f'run:{run} length:{length}')
     else:
-        rundirs[file.parent] = file
-
-for parent, file in rundirs.items():
-
-    if file.stat().st_size < args.minsize:
-        print(file.parent, file.name, file.stat().st_size)
-        if args.list:
-            pass
-        else:
+        if length < args.delete_smaller_than:
             try:
-                shutil.rmtree(str(file.parent))
+                print(f'{run} is {length} and was deleted')
+                shutil.rmtree(run)
             except:
-                print(f"OS didn't let us delete {str(file.parent)}")
+                print(f"OS didn't let us delete {run}")
