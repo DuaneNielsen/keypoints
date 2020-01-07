@@ -173,7 +173,7 @@ class NaiveCovarianceMatrixAdaptation(CMA):
         self.samples = 4 + floor(3 * log(N)) * 2
         self.mu = self.samples // 2
         self.gen_count = 0
-        self.cma = self.mu / N ** 2 if cma is None else cma
+        self.cmu = self.mu / N ** 2 if cma is None else cma
 
     def step(self, objective_f, rank_order='max'):
         params = simple_sample(self.N, self.samples, self.mean, self.c)
@@ -188,16 +188,19 @@ class NaiveCovarianceMatrixAdaptation(CMA):
         self.mean = g.mean(0)
         g = g - mean_prev
         c_cma = torch.matmul(g.T, g) / self.mu
-        self.c = (1 - self.cma) * self.c + self.cma * c_cma
+        self.c = (1 - self.cmu) * self.c + self.cmu * c_cma
 
         info = {'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm()}
         self.gen_count += 1
 
         return ranked_results, info
 
+    def __repr__(self):
+        return f'N: {self.N}, mu: {self.mu}, cmu: {self.cmu}'
+
 
 class FastCovarianceMatrixAdaptation(CMA):
-    def __init__(self, N):
+    def __init__(self, N, step_mode='auto'):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
 
@@ -218,6 +221,7 @@ class FastCovarianceMatrixAdaptation(CMA):
         self.damps = 1 + 2 * max(0.0, sqrt((self.mueff - 1.0) / (N + 1)) - 1) + self.cs
         self.chiN = expect_multivariate_norm(N)
         self.step_size = 0.5
+        self.step_mode = step_mode
 
         # variables
         self.mean = torch.zeros(N)
@@ -264,7 +268,8 @@ class FastCovarianceMatrixAdaptation(CMA):
         hsig = 1.0 if hsig else 0.0
 
         # adapt step size
-        self.step_size = self.step_size * ((self.cs / self.damps) * (correlation - 1.0)).exp()
+        if self.step_mode == 'auto':
+            self.step_size = self.step_size * ((self.cs / self.damps) * (correlation - 1.0)).exp()
 
         # a mind bending way to write a exponential smoothed moving average
         # zmean does not contain step size or mean, so allows us to add together
