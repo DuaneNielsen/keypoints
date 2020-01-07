@@ -4,7 +4,7 @@ from torch.utils.tensorboard import SummaryWriter
 from math import floor, sqrt, log
 import config
 from torch import softmax
-from torch.distributions import Categorical
+from torch.distributions import Categorical, MultivariateNormal
 import torchvision.transforms.functional as TVF
 from utils import UniImageViewer, plot_keypoints_on_image
 from models import transporter
@@ -12,7 +12,6 @@ from models import functional as KF
 import datasets as ds
 import gym
 import multiprocessing as mp
-
 
 def nop(s_t):
     return s_t
@@ -139,8 +138,62 @@ def sample(n, sigma, mean, B, D):
     return s.T, z.T
 
 
+def simple_sample(features, n, mean, c):
+    z = torch.randn(features, n, device=mean.device, dtype=mean.dtype)
+    s = mean.view(-1, 1) + c.matmul(z)
+    return s.T
+
+
 def expect_multivariate_norm(N):
     return N ** 0.5 * (1 - 1 / (4 * N) + 1 / (21 * N ** 2))
+
+
+
+class CMA(object):
+    def _rank(self, results, rank_order):
+        if rank_order == 'max':
+            ranked_results = sorted(results, key=lambda x: x['fitness'], reverse=True)
+        elif rank_order == 'min':
+            ranked_results = sorted(results, key=lambda x: x['fitness'])
+        else:
+            raise Exception(f'invalid value for kwarg type {rank_order}, valid values are max or min')
+
+        return ranked_results
+
+    def step(self, object_f, rank_order='max'):
+        pass
+
+
+class NaiveCovarianceMatrixAdaptation(CMA):
+    def __init__(self, N, cma=None):
+        self.N = N
+        # variables
+        self.mean = torch.zeros(N)
+        self.c = torch.eye(N)
+        self.samples = 4 + floor(3 * log(N)) * 2
+        self.mu = self.samples // 2
+        self.gen_count = 0
+        self.cma = self.mu / N ** 2 if cma is None else cma
+
+    def step(self, objective_f, rank_order='max'):
+        params = simple_sample(self.N, self.samples, self.mean, self.c)
+        # rank by fitness
+        f = objective_f(params)
+        results = [{'parameters': params[i], 'fitness': f.item()} for i, f in enumerate(f)]
+        ranked_results = self._rank(results, rank_order)
+
+        selected_results = ranked_results[0:self.mu]
+        g = torch.stack([g['parameters'] for g in selected_results])
+        mean_prev = self.mean.clone()
+        self.mean = g.mean(0)
+        g = g - mean_prev
+        c_cma = torch.matmul(g.T, g) / self.N
+        self.c = (1 - self.cma) * self.c + self.cma * c_cma
+
+        info = {'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm()}
+        self.gen_count += 1
+
+        return ranked_results, info
 
 
 class FastCovarianceMatrixAdaptation(object):
@@ -237,7 +290,7 @@ class FastCovarianceMatrixAdaptation(object):
         self.gen_count += 1
 
         info = {'step_size': self.step_size, 'correlation': correlation,
-                'fitness_max': f.max(), 'fitness_mean': f.mean()}
+                'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm()}
         return ranked_results, info
 
     def __repr__(self):

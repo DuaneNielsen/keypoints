@@ -625,9 +625,31 @@ def test_FastCMA():
 
     for _ in range(1, 20):
         ranked_results, info = fast_cma.step(spike_one)
-        selected = torch.stack([g['sample'] for g in ranked_results[0:fast_cma.mu]])
+        selected = torch.stack([g['parameters'] for g in ranked_results[0:fast_cma.mu]])
         plot_heatmap('select', fast_cma.gen_count, fast_cma.mean, fast_cma.b, fast_cma.d,
                      g=selected, chiN=fast_cma.chiN, step_size=fast_cma.step_size)
+        for key in metrics:
+            metrics[key].append(info[key])
+
+    for key in metrics:
+        plt.title(key)
+        plt.plot(metrics[key])
+        plt.legend(loc='lower left')
+        plt.show()
+
+
+def test_NaiveCMA():
+
+    n_cma = cma_es.NaiveCovarianceMatrixAdaptation(2)
+
+    metrics = {'fitness_mean': [], 'fitness_max': [], 'c_norm': []}
+
+    for gen in range(1, 20):
+        ranked_results, info = n_cma.step(spike_one)
+        selected = torch.stack([g['parameters'] for g in ranked_results[0:n_cma.mu]])
+        d, b = torch.symeig(n_cma.c, eigenvectors=True)
+        d = d.sqrt().diag_embed()
+        plot_heatmap('select', gen, n_cma.mean, b, d, g=selected)
         for key in metrics:
             metrics[key].append(info[key])
 
