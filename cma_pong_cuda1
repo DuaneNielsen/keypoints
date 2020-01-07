@@ -1,0 +1,4 @@
+export TSP_SOCKET='/tmp/socket-cuda1'
+tsp python cma_es.py --run_id 81 --config configs/transporter_pong_color.yaml --load data/models/transporter/VGG_PONG_LAYERNECK/run_40/best/ --device cuda:1 --cma_algo fast --epochs 50
+tsp python cma_es.py --run_id 82 --config configs/transporter_pong_color.yaml --load data/models/transporter/VGG_PONG_LAYERNECK/run_40/best/ --device cuda:1 --cma_algo fast --epochs 50
+tsp python cma_es.py --run_id 83 --config configs/transporter_pong_color.yaml --load data/models/transporter/VGG_PONG_LAYERNECK/run_40/best/ --device cuda:1 --cma_algo fast --epochs 50
