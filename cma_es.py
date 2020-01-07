@@ -250,6 +250,8 @@ if __name__ == '__main__':
     log_dir = f'data/cma_es/{args.run_id}/'
     tb = SummaryWriter(log_dir)
     global_step = 0
+    best_reward = -1e8
+    show = False
 
     if args.model_keypoints:
         policy_features = args.model_keypoints * 2
@@ -274,6 +276,13 @@ if __name__ == '__main__':
         for key, value in info.items():
             tb.add_scalar(key, value, global_step)
 
-        demo.fitness(ranked_results[0]['parameters'].unsqueeze(0))
+        if ranked_results[0]['fitness'] > best_reward:
+            best_reward = ranked_results[0]['fitness']
+            torch.save(ranked_results[0]['parameters'], log_dir + 'best_of_generation.pt')
+            show = True
 
+        if args.display and (global_step % args.display_freq == 0 or show):
+            demo.fitness(ranked_results[0]['parameters'].unsqueeze(0))
+
+        show = False
         global_step += 1
