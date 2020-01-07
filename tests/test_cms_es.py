@@ -94,8 +94,8 @@ def plot_heatmap(title, count, mean, b, d, step_size=1.0, samples=None, g=None, 
     max_s_x = samples[:, 0].abs().max() if samples is not None else 0
     max_s_y = samples[:, 1].abs().max() if samples is not None else 0
 
-    xscale = max(xunit_x.abs().max().item(), yunit_x.abs().max().item(), 0.3, max_g_x, max_s_x, objective_mean[0]) * 1.1
-    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item(), 0.4, max_g_y, max_s_y, objective_mean[1]) * 1.1
+    xscale = max(xunit_x.abs().max().item(), yunit_x.abs().max().item(), 0.3, max_g_x, max_s_x, objective_mean[0]) * axis_scale
+    yscale = max(xunit_y.abs().max().item(), yunit_y.abs().max().item(), 0.4, max_g_y, max_s_y, objective_mean[1]) * axis_scale
 
     ax2.set_xlim(-xscale + mean[0], xscale + mean[0])
     ax2.set_ylim(-yscale + mean[1], yscale + mean[1])
@@ -611,14 +611,28 @@ def test_hyperparams():
         if counteval % plot_freq == 0:
             plot_heatmap('select', counteval, mean, b, d, g=g_raw, chiN=chiN, step_size=step_size)
 
-    plt.title('step_size')
-    plt.plot(step_size_l, label='step_size')
-    plt.legend(loc='lower left')
-    plt.show()
-    plt.plot(correlation_l, label='correlation')
-    plt.legend(loc='lower left')
-    plt.show()
-    plt.plot(fitness_l, label='fitness')
-    plt.legend(loc='lower left')
-    plt.show()
-    plt.show()
+
+def spike_one(w):
+    x, y = w[:, 0], w[:, 1]
+    return 1 / ((x * 2.0 + objective_mean[0]) ** 2 + (y * 2.0 + objective_mean[1]) ** 2).sqrt()
+
+
+def test_FastCMA():
+
+    fast_cma = cma_es.FastCovarianceMatrixAdaptation(2)
+
+    metrics = {'step_size': [], 'correlation': [], 'fitness_max': []}
+
+    for _ in range(1, 20):
+        ranked_results, info = fast_cma.step(spike_one)
+        selected = torch.stack([g['sample'] for g in ranked_results[0:fast_cma.mu]])
+        plot_heatmap('select', fast_cma.gen_count, fast_cma.mean, fast_cma.b, fast_cma.d,
+                     g=selected, chiN=fast_cma.chiN, step_size=fast_cma.step_size)
+        for key in metrics:
+            metrics[key].append(info[key])
+
+    for key in metrics:
+        plt.title(key)
+        plt.plot(metrics[key])
+        plt.legend(loc='lower left')
+        plt.show()

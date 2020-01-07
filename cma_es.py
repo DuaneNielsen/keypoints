@@ -1,42 +1,71 @@
-import gym
+import torch
+import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
+from math import floor, sqrt, log
+import config
+from torch import softmax
+from torch.distributions import Categorical
+import torchvision.transforms.functional as TVF
+from utils import UniImageViewer, plot_keypoints_on_image
 from models import transporter
 from models import functional as KF
-import torch
-import config
 import datasets as ds
-from torchvision.transforms import functional as TVF
-from torch.distributions.multivariate_normal import MultivariateNormal
-from torch.distributions.categorical import Categorical
-from utils import UniImageViewer, plot_keypoints_on_image
-from torch import nn
-from torch.nn.functional import softmax
-from higgham import isPD, np_nearestPD
+import gym
 import multiprocessing as mp
-from tqdm import trange
-from torch.utils.tensorboard import SummaryWriter
-from statistics import mean
-from pathlib import Path
-from numpy import linalg as la
 
 
-def make_args(args, datapack, weights, policy_features, actions, render=False):
-    args_dict = {}
-    args_dict['args'] = args
-    args_dict['env'] = datapack.env
-    args_dict['policy'] = weights.reshape(policy_features, actions).cpu().numpy()
-    args_dict['render'] = render
-    return args_dict
+def nop(s_t):
+    return s_t
 
 
-def multi_evaluate(arg_dict):
-    args = arg_dict['args']
-    env = gym.make(arg_dict['env'])
-    policy = torch.from_numpy(arg_dict['policy']).to(args.device)
-    render = arg_dict['render']
-    return evaluate(args, env, policy, render)
+class Keypoints(nn.Module):
+    def __init__(self, transporter_net):
+        super().__init__()
+        self.transporter_net = transporter_net
+
+    def forward(self, s_t):
+        heatmap = self.transporter_net.keypoint(s_t)
+        kp = KF.spacial_logsoftmax(heatmap)
+        return kp
 
 
-def evaluate(args, env, policy, render=False):
+class EvalPacket():
+    def __init__(self, args, datapack, weights, features, render):
+        """
+        Serializable arguments for eval function
+        :param args:
+        :param datapack:
+        :param weights:
+        :param render:
+        """
+        self.args = args
+        self.datapack = datapack
+        self.weights = weights
+        self.render = render
+        self.features = features
+
+
+def encode(args, datapack, weights, features, render):
+    weights = weights.cpu().numpy()
+    return EvalPacket(args, datapack, weights, features, render)
+
+
+def decode(packet):
+    packet.weights = torch.from_numpy(packet.weights).to(packet.args.device)
+    return packet
+
+
+def evaluate(packet):
+    packet = decode(packet)
+    args = packet.args
+    features = packet.features
+    render = packet.render
+
+    datapack = ds.datasets[args.dataset]
+    env = gym.make(datapack.env)
+    actions = datapack.action_map.size
+    policy = packet.weights.reshape(features, actions)
+
     with torch.no_grad():
 
         def get_action(s, prepro, transform, view, policy, action_map, device):
@@ -50,10 +79,7 @@ def evaluate(args, env, policy, render=False):
 
         v = UniImageViewer()
 
-        datapack = ds.datasets[args.dataset]
-
         if args.model_type != 'nop':
-
             transporter_net = transporter.make(args, map_device='cpu')
             view = Keypoints(transporter_net).to(args.device)
 
@@ -78,24 +104,31 @@ def evaluate(args, env, policy, render=False):
                     s = plot_keypoints_on_image(kp[0], s[0])
                     v.render(s)
                 else:
-                   env.render()
+                    env.render()
 
     return reward
 
 
-class Keypoints(nn.Module):
-    def __init__(self, transporter_net):
-        super().__init__()
-        self.transporter_net = transporter_net
+class AtariMpEvaluator(object):
+    def __init__(self, args, datapack, policy_features, policy_actions):
+        self.args = args
+        self.datapack = datapack
+        self.policy_features = policy_features
+        self.policy_actions = policy_actions
 
-    def forward(self, s_t):
-        heatmap = self.transporter_net.keypoint(s_t)
-        kp = KF.spacial_logsoftmax(heatmap)
-        return kp
+    def fitness(self, candidates):
+        weights = torch.unbind(candidates, dim=0)
 
+        worker_args = [encode(self.args, self.datapack, w, self.policy_features, False) for w in weights]
 
-def nop(s_t):
-    return s_t
+        with mp.Pool(processes=args.processes) as pool:
+            results = pool.map(evaluate, worker_args)
+
+        results = torch.tensor(results)
+        return results
+
+    def len_policy_weights(self):
+        return self.policy_features * self.policy_actions
 
 
 def sample(n, sigma, mean, B, D):
@@ -105,39 +138,117 @@ def sample(n, sigma, mean, B, D):
     return s.T, z.T
 
 
-def save_and_monitor():
-    global best_reward
-    print([candidate['reward'] for candidate in generation])
+def expect_multivariate_norm(N):
+    return N ** 0.5 * (1 - 1 / (4 * N) + 1 / (21 * N ** 2))
 
-    # if this is the best, save and show it
-    best_of_generation = generation[0]
-    tb.add_scalar('gen/gen_mean', mean(results), global_step)
-    tb.add_scalar('gen/gen_best', best_of_generation['reward'], global_step)
-    tb.add_scalar('gen/gen_mean_selected', mean(results[0:num_candidates // 4]), global_step)
-    if best_of_generation['reward'] > best_reward:
-        torch.save(best_of_generation, log_dir + 'best_of_generation.pt')
-        best_reward = best_of_generation['reward']
-        policy = best_of_generation['weights'].reshape(policy_features, actions).to(args.device)
-        evaluate(args, env, policy, args.display)
+
+class FastCovarianceMatrixAdaptation(object):
+    def __init__(self, N):
+        self.N = N
+        self.recommended_steps = range(1, floor(1e3 * N ** 2))
+
+        # selection settings
+        self.samples = 4 + floor(3 * log(N))
+        self.mu = self.samples / 2
+        self.weights = torch.tensor([log(self.mu + 0.5)]) - torch.linspace(start=1, end=self.mu,
+                                                                           steps=floor(self.mu)).log()
+        self.weights = self.weights / self.weights.sum()
+        self.mu = floor(self.mu)
+        self.mueff = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
+
+        # adaptation settings
+        self.cc = (4 + self.mueff / N) / (N + 4 + 2 * self.mueff / N)
+        self.cs = (self.mueff + 2) / (N + self.mueff + 5)
+        self.c1 = 2 / ((self.N + 1.3) ** 2 + self.mueff)
+        self.cmu = 2 * (self.mueff - 2 + 1 / self.mueff) / ((N + 2) ** 2 + 2 * self.mueff / 2)
+        self.damps = 1 + 2 * max(0.0, sqrt((self.mueff - 1.0) / (N + 1)) - 1) + self.cs
+        self.chiN = expect_multivariate_norm(N)
+        self.step_size = 0.5
+
+        # variables
+        self.mean = torch.zeros(N)
+        self.b = torch.eye(N)
+        self.d = torch.eye(N)
+        self.c = torch.matmul(self.b.matmul(self.d), self.b.matmul(self.d).T)  # c = B D D B.T
+
+        self.pc = torch.zeros(N)
+        self.ps = torch.zeros(N)
+        self.gen_count = 1
+
+    def step(self, objective_f, type='max'):
+
+        # sample parameters
+        s, z = sample(self.samples, self.step_size, self.mean, self.b, self.d)
+
+        # rank by fitness
+        f = objective_f(s)
+        results = [{'sample': s[i], 'z': z[i], 'fitness': f.item()} for i, f in enumerate(f)]
+
+        if type == 'max':
+            ranked_results = sorted(results, key=lambda x: x['fitness'], reverse=True)
+        elif type == 'min':
+            ranked_results = sorted(results, key=lambda x: x['fitness'])
+        else:
+            raise Exception(f'invalid value for kwarg type {type}, valid values are max or min')
+
+        selected_results = ranked_results[0:self.mu]
+        z = torch.stack([g['z'] for g in selected_results])
+        g = torch.stack([g['sample'] for g in selected_results])
+
+        self.mean = (g * self.weights.unsqueeze(1)).sum(0)
+        zmean = (z * self.weights.unsqueeze(1)).sum(0)
+
+        # step size
+        self.ps = (1 - self.cs) * self.ps + sqrt(self.cs * (2.0 - self.cs)) * self.b.matmul(zmean)
+
+        correlation = self.ps.norm() / self.chiN
+
+        # delay the introduction of the rank 1 update
+        denominator = sqrt(1 - (1 - self.cs) ** (2 * self.gen_count / self.samples))
+        threshold = 1.4e2 / self.N + 1
+        hsig = correlation / denominator < threshold
+        hsig = 1.0 if hsig else 0.0
+
+        # adapt step size
+        self.step_size = self.step_size * ((self.cs / self.damps) * (correlation - 1.0)).exp()
+
+        # a mind bending way to write a exponential smoothed moving average
+        # zmean does not contain step size or mean, so allows us to add together
+        # updates of different step sizes
+        self.pc = (1 - self.cc) * self.pc + hsig * sqrt(self.cc * (2.0 - self.cc) * self.mueff) * self.b.matmul(
+            self.d).matmul(zmean)
+        # which we then combine to make a covariance matrix, from 1 (mean) datapoint!
+        # this is why it's called "rank 1" update
+        pc_cov = self.pc.unsqueeze(1).matmul(self.pc.unsqueeze(1).t())
+        # mix back in the old covariance if hsig == 0
+        pc_cov = pc_cov + (1 - hsig) * self.cc * (2 - self.cc) * self.c
+
+        # estimate cov for all selected samples (weighted by rank)
+        bdz = self.b.matmul(self.d).matmul(z.t())
+        cmu_cov = torch.matmul(bdz, self.weights.diag_embed())
+        cmu_cov = cmu_cov.matmul(bdz.t())
+
+        self.c = (1.0 - self.c1 - self.cmu) * self.c + (self.c1 * pc_cov) + (self.cmu * cmu_cov)
+
+        # pull out the eigenthings and do the business
+        self.d, self.b = torch.symeig(self.c, eigenvectors=True)
+        self.d = self.d.sqrt().diag_embed()
+        self.gen_count += 1
+
+        info = {'step_size': self.step_size, 'correlation': correlation,
+                'fitness_max': f.max(), 'fitness_mean': f.mean()}
+        return ranked_results, info
+
+    def __repr__(self):
+        return f'N: {cma.N}, mu: {cma.mu}, mueff: {cma.mueff}, cc: {cc}, cs: {cma.cs}, c1: {cma.c1}, cmu: {cma.cmu}, damps: {cma.damps}, chiN: {cma.chiN}'
 
 
 if __name__ == '__main__':
-    mp.set_start_method('spawn')
-    """ CMA - ES algorithm
-
-    implemented from
-    
-    https: // arxiv.org / abs / 1604.00772
-
-    """""
 
     args = config.config()
-
     log_dir = f'data/cma_es/{args.run_id}/'
     tb = SummaryWriter(log_dir)
     global_step = 0
-
-    sigma = 1.0
 
     if args.model_keypoints:
         policy_features = args.model_keypoints * 2
@@ -145,70 +256,20 @@ if __name__ == '__main__':
         policy_features = args.policy_inputs
 
     datapack = ds.datasets[args.dataset]
-    env = gym.make(datapack.env)
-    actions = datapack.action_map.size
+    evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
 
-    # need 2 times the number of samples or covariance matrix might not be positive semi definite
-    # meaning at least one x will be linear in the other
-    num_candidates = 16
-    size = policy_features * actions
-    m = torch.zeros(size, device=args.device)
-    step = torch.ones(size, device=args.device)
-    c = torch.eye(size, device=args.device)
-    b = torch.eye(size, device=args.device)  # rotation covariance
-    d = torch.eye(size, device=args.device)  # diagonal std-dev covariance
+    cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
 
-    best_reward = -50000.0
+    tb.add_text('args', args, global_step)
+    tb.add_text('cma_params', str(cma), global_step)
 
-    if args.demo:
-        while True:
-            policy = torch.load(log_dir + 'best_of_generation.pt')['weights'].reshape(policy_features, actions)
-            evaluate(args, env, policy, True)
+    for step in cma.recommended_steps:
 
-    for _ in trange(args.epochs):
+        ranked_results, info = cma.step(evaluator.fitness)
 
-        candidates, z = sample(num_candidates, sigma, m, b, d)
-        weights = torch.unbind(candidates, dim=0)
+        print([result['fitness'] for result in ranked_results])
 
-        worker_args = [make_args(args, datapack, w, policy_features, actions, False) for w in weights]
-
-        with mp.Pool(processes=args.processes) as pool:
-            results = pool.map(multi_evaluate, worker_args)
-
-        generation = []
-        for i in range(len(results)):
-            generation.append({'weights': weights[i], 'z': z[i], 'reward': results[i]})
-
-        # get the fittest 25 %
-        generation = sorted(generation, key=lambda x: x['reward'], reverse=True)
-
-        save_and_monitor()
-
-        #g = torch.stack([candidate['weights'] for candidate in generation])
-        g = torch.stack([candidate['z'] for candidate in generation])
-        g = g[0:num_candidates // 4].to(args.device)
-
-        # compute new mean and covariance matrix
-        m_p = m.clone().to(args.device)
-        c_p = c.clone().to(args.device)
-
-        m = g.mean(0)
-        #g = g - m_p
-        #c = (g.T.matmul(g) / (g.size(0))
-        rank_mu_term = torch.matmul(b, torch.matmul(d, z))
-        c = rank_mu_term.T.matmul(rank_mu_term)
-        covariance_discount = num_candidates // 4 / m.size(0) ** 2
-        c = (1 - covariance_discount) * c_p + covariance_discount * c
-
-        #d, b = la.eigh(c.cpu().numpy())
-        #d, b = torch.from_numpy(d).to(args.device), torch.from_numpy(b).to(args.device)
-
-        # decompose covariance matrix into eigevectors and rescale to stdev
-        d, b = c.symeig(True)
-        d = d.sqrt().diag_embed()
+        for key, value in info.items():
+            tb.add_scalar(key, value, global_step)
 
         global_step += 1
-
-
-
-
