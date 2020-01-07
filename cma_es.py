@@ -110,16 +110,17 @@ def evaluate(packet):
 
 
 class AtariMpEvaluator(object):
-    def __init__(self, args, datapack, policy_features, policy_actions):
+    def __init__(self, args, datapack, policy_features, policy_actions, render=False):
         self.args = args
         self.datapack = datapack
         self.policy_features = policy_features
         self.policy_actions = policy_actions
+        self.render = render
 
     def fitness(self, candidates):
         weights = torch.unbind(candidates, dim=0)
 
-        worker_args = [encode(self.args, self.datapack, w, self.policy_features, False) for w in weights]
+        worker_args = [encode(self.args, self.datapack, w, self.policy_features, self.render) for w in weights]
 
         with mp.Pool(processes=args.processes) as pool:
             results = pool.map(evaluate, worker_args)
@@ -182,7 +183,7 @@ class FastCovarianceMatrixAdaptation(object):
 
         # rank by fitness
         f = objective_f(s)
-        results = [{'sample': s[i], 'z': z[i], 'fitness': f.item()} for i, f in enumerate(f)]
+        results = [{'parameters': s[i], 'z': z[i], 'fitness': f.item()} for i, f in enumerate(f)]
 
         if type == 'max':
             ranked_results = sorted(results, key=lambda x: x['fitness'], reverse=True)
@@ -193,7 +194,7 @@ class FastCovarianceMatrixAdaptation(object):
 
         selected_results = ranked_results[0:self.mu]
         z = torch.stack([g['z'] for g in selected_results])
-        g = torch.stack([g['sample'] for g in selected_results])
+        g = torch.stack([g['parameters'] for g in selected_results])
 
         self.mean = (g * self.weights.unsqueeze(1)).sum(0)
         zmean = (z * self.weights.unsqueeze(1)).sum(0)
@@ -240,7 +241,7 @@ class FastCovarianceMatrixAdaptation(object):
         return ranked_results, info
 
     def __repr__(self):
-        return f'N: {cma.N}, mu: {cma.mu}, mueff: {cma.mueff}, cc: {cc}, cs: {cma.cs}, c1: {cma.c1}, cmu: {cma.cmu}, damps: {cma.damps}, chiN: {cma.chiN}'
+        return f'N: {self.N}, mu: {self.mu}, mueff: {self.mueff}, cc: {self.cc}, cs: {self.cs}, c1: {self.c1}, cmu: {self.cmu}, damps: {self.damps}, chiN: {self.chiN}'
 
 
 if __name__ == '__main__':
@@ -257,10 +258,11 @@ if __name__ == '__main__':
 
     datapack = ds.datasets[args.dataset]
     evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
+    demo = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
 
     cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
 
-    tb.add_text('args', args, global_step)
+    tb.add_text('args', str(args), global_step)
     tb.add_text('cma_params', str(cma), global_step)
 
     for step in cma.recommended_steps:
@@ -271,5 +273,7 @@ if __name__ == '__main__':
 
         for key, value in info.items():
             tb.add_scalar(key, value, global_step)
+
+        demo.fitness(ranked_results[0]['parameters'].unsqueeze(0))
 
         global_step += 1
