@@ -344,3 +344,8 @@ if __name__ == '__main__':
 
         show = False
         global_step += 1
+
+        if args.epochs is not None and step >= args.epochs:
+            break
+
+
