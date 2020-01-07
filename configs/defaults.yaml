@@ -6,3 +6,5 @@ display_freq: 5000
 transporter_combine_mode: max
 processes: 8
 cma_algo: fast
+cma_step_mode: auto
+cma_step_decay: 0.001

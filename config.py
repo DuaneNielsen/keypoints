@@ -24,7 +24,13 @@ def config():
     parser.add_argument('--config', type=str, default=None)
     parser.add_argument('--epochs', type=int, default=800)
     parser.add_argument('--processes', type=int)
+
+    """cma params"""
     parser.add_argument('--cma_algo', type=str)
+    parser.add_argument('--cma_step_mode', type=str)
+    parser.add_argument('--cma_step_decay', type=float, default=None)
+    parser.add_argument('--cma_initial_step_size', type=float, default=None)
+    parser.add_argument('--cma_samples', type=int, default=None)
 
     """ visualization params """
     parser.add_argument('--display', action='store_true')

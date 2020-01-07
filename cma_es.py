@@ -164,13 +164,13 @@ class CMA(object):
 
 
 class NaiveCovarianceMatrixAdaptation(CMA):
-    def __init__(self, N, cma=None):
+    def __init__(self, N, cma=None, samples=None):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
         # variables
         self.mean = torch.zeros(N)
         self.c = torch.eye(N)
-        self.samples = 4 + floor(3 * log(N)) * 2
+        self.samples = 4 + floor(3 * log(N)) * 2 if samples is None else samples
         self.mu = self.samples // 2
         self.gen_count = 0
         self.cmu = self.mu / N ** 2 if cma is None else cma
@@ -200,12 +200,12 @@ class NaiveCovarianceMatrixAdaptation(CMA):
 
 
 class FastCovarianceMatrixAdaptation(CMA):
-    def __init__(self, N, step_mode='auto'):
+    def __init__(self, N, step_mode='auto', step_decay=None, initial_step_size=None, samples=None):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
 
         # selection settings
-        self.samples = 4 + floor(3 * log(N))
+        self.samples = 4 + floor(3 * log(N)) if samples is None else samples
         self.mu = self.samples / 2
         self.weights = torch.tensor([log(self.mu + 0.5)]) - torch.linspace(start=1, end=self.mu,
                                                                            steps=floor(self.mu)).log()
@@ -220,8 +220,11 @@ class FastCovarianceMatrixAdaptation(CMA):
         self.cmu = 2 * (self.mueff - 2 + 1 / self.mueff) / ((N + 2) ** 2 + 2 * self.mueff / 2)
         self.damps = 1 + 2 * max(0.0, sqrt((self.mueff - 1.0) / (N + 1)) - 1) + self.cs
         self.chiN = expect_multivariate_norm(N)
-        self.step_size = 0.5
+        self.step_size = 0.5 if initial_step_size is None else initial_step_size
         self.step_mode = step_mode
+        if step_mode == 'decay' and step_decay is None:
+            raise Exception('decay mode requires you set a step decay')
+        self.step_decay = 1.0 - step_decay
 
         # variables
         self.mean = torch.zeros(N)
@@ -270,6 +273,14 @@ class FastCovarianceMatrixAdaptation(CMA):
         # adapt step size
         if self.step_mode == 'auto':
             self.step_size = self.step_size * ((self.cs / self.damps) * (correlation - 1.0)).exp()
+        elif self.step_mode == 'nodamp':
+            self.step_size = self.step_size * (correlation - 1.0).exp()
+        elif self.step_mode == 'decay':
+            self.step_size = self.step_size * self.step_decay
+        elif self.step_mode == 'constant':
+            pass
+        else:
+            raise Exception('step_mode must be auto | nodamp | decay | constant')
 
         # a mind bending way to write a exponential smoothed moving average
         # zmean does not contain step size or mean, so allows us to add together
@@ -321,11 +332,15 @@ if __name__ == '__main__':
     demo = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
 
     if args.cma_algo == 'fast':
-        cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
+        cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
+                                             step_mode=args.cma_step_mode,
+                                             step_decay=args.cma_step_decay,
+                                             initial_step_size=args.cma_initial_step_size,
+                                             samples=args.cma_samples)
     elif args.cma_algo == 'naive':
-        cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
+        cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(), samples=args.cma_samples)
     else:
-        cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
+        raise Exception('--cma_algo fast | naive')
 
     tb.add_text('args', str(args), global_step)
     tb.add_text('cma_params', str(cma), global_step)
