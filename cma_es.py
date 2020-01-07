@@ -148,7 +148,6 @@ def expect_multivariate_norm(N):
     return N ** 0.5 * (1 - 1 / (4 * N) + 1 / (21 * N ** 2))
 
 
-
 class CMA(object):
     def _rank(self, results, rank_order):
         if rank_order == 'max':
@@ -229,7 +228,7 @@ class FastCovarianceMatrixAdaptation(object):
         self.ps = torch.zeros(N)
         self.gen_count = 1
 
-    def step(self, objective_f, type='max'):
+    def step(self, objective_f, rank_order='max'):
 
         # sample parameters
         s, z = sample(self.samples, self.step_size, self.mean, self.b, self.d)
@@ -238,12 +237,12 @@ class FastCovarianceMatrixAdaptation(object):
         f = objective_f(s)
         results = [{'parameters': s[i], 'z': z[i], 'fitness': f.item()} for i, f in enumerate(f)]
 
-        if type == 'max':
+        if rank_order == 'max':
             ranked_results = sorted(results, key=lambda x: x['fitness'], reverse=True)
-        elif type == 'min':
+        elif rank_order == 'min':
             ranked_results = sorted(results, key=lambda x: x['fitness'])
         else:
-            raise Exception(f'invalid value for kwarg type {type}, valid values are max or min')
+            raise Exception(f'invalid value for kwarg type {rank_order}, valid values are max or min')
 
         selected_results = ranked_results[0:self.mu]
         z = torch.stack([g['z'] for g in selected_results])
