@@ -300,7 +300,8 @@ class FastCovarianceMatrixAdaptation(CMA):
 if __name__ == '__main__':
 
     args = config.config()
-    log_dir = f'data/cma_es/{args.run_id}/'
+    datapack = ds.datasets[args.dataset]
+    log_dir = f'data/cma_es/{datapack.env}/{args.run_id}/'
     tb = SummaryWriter(log_dir)
     global_step = 0
     best_reward = -1e8
@@ -311,7 +312,6 @@ if __name__ == '__main__':
     else:
         policy_features = args.policy_inputs
 
-    datapack = ds.datasets[args.dataset]
     evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
     demo = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
 
