@@ -149,7 +149,7 @@ def expect_multivariate_norm(N):
 
 
 class CMA(object):
-    def _rank(self, results, rank_order):
+    def _rank(self, results, rank_order='max'):
         if rank_order == 'max':
             ranked_results = sorted(results, key=lambda x: x['fitness'], reverse=True)
         elif rank_order == 'min':
