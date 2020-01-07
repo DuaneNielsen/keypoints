@@ -187,7 +187,7 @@ class NaiveCovarianceMatrixAdaptation(CMA):
         mean_prev = self.mean.clone()
         self.mean = g.mean(0)
         g = g - mean_prev
-        c_cma = torch.matmul(g.T, g) / self.samples
+        c_cma = torch.matmul(g.T, g) / self.mu
         self.c = (1 - self.cma) * self.c + self.cma * c_cma
 
         info = {'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm()}
