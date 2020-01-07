@@ -5,3 +5,4 @@ display_freq: 5000
 
 transporter_combine_mode: max
 processes: 8
+cma_algo: fast

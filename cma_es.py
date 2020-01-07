@@ -166,6 +166,7 @@ class CMA(object):
 class NaiveCovarianceMatrixAdaptation(CMA):
     def __init__(self, N, cma=None):
         self.N = N
+        self.recommended_steps = range(1, floor(1e3 * N ** 2))
         # variables
         self.mean = torch.zeros(N)
         self.c = torch.eye(N)
@@ -195,7 +196,7 @@ class NaiveCovarianceMatrixAdaptation(CMA):
         return ranked_results, info
 
 
-class FastCovarianceMatrixAdaptation(object):
+class FastCovarianceMatrixAdaptation(CMA):
     def __init__(self, N):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
@@ -314,7 +315,12 @@ if __name__ == '__main__':
     evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
     demo = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
 
-    cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
+    if args.cma_algo == 'fast':
+        cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
+    elif args.cma_algo == 'naive':
+        cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
+    else:
+        cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights())
 
     tb.add_text('args', str(args), global_step)
     tb.add_text('cma_params', str(cma), global_step)
