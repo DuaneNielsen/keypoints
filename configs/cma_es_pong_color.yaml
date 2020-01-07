@@ -5,7 +5,7 @@ model_type: VGG_PONG_LAYERNECK
 model_in_channels: 3
 model_z_channels : 16
 model_keypoints : 3
-load: data/models/transporter/VGG_PONG_LAYERNECK/run_40/best/
+load: /home/duane/data/models/transporter/VGG_PONG_LAYERNECK/run_40/best/
 dataset: pong_color
 dataset_train_len: 20000
 dataset_test_len: 2100
