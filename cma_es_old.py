@@ -111,9 +111,9 @@ def save_and_monitor():
 
     # if this is the best, save and show it
     best_of_generation = generation[0]
-    tb.add_scalar('gen/gen_mean', mean(results), global_step)
-    tb.add_scalar('gen/gen_best', best_of_generation['reward'], global_step)
-    tb.add_scalar('gen/gen_mean_selected', mean(results[0:num_candidates // 4]), global_step)
+    tb.add_scalar('fitness_mean', mean(results), global_step)
+    tb.add_scalar('fitness_best', best_of_generation['reward'], global_step)
+    tb.add_scalar('fitmess_mean_selected', mean(results[0:num_candidates // 4]), global_step)
     if best_of_generation['reward'] > best_reward:
         torch.save(best_of_generation, log_dir + 'best_of_generation.pt')
         best_reward = best_of_generation['reward']
