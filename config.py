@@ -14,7 +14,7 @@ def config():
     """ config """
     parser = argparse.ArgumentParser(description='load_yaml_file')
     parser.add_argument('-d', '--device', type=str)
-    parser.add_argument('-r', '--run_id', type=int, required=True)
+    parser.add_argument('-r', '--run_id', type=int, default=-1)
     parser.add_argument('--comment', type=str)
     parser.add_argument('--demo', action='store_true', default=False)
     parser.add_argument('-l', '--load', type=str, default=None)
@@ -85,5 +85,23 @@ def config():
         args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     else:
         args.device = torch.device(args.device)
+
+    def counter():
+        run_id_pid = Path('./.run_id')
+        count = 1
+        if run_id_pid.exists():
+            with run_id_pid.open('r+') as f:
+                last_id = int(f.readline())
+                last_id += 1
+                count = last_id
+                f.seek(0)
+                f.write(str(last_id))
+        else:
+            with run_id_pid.open('w+') as f:
+                f.write(str(count))
+        return count
+
+    if args.run_id == -1:
+        args.run_id = counter()
 
     return args
