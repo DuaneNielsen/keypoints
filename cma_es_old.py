@@ -132,8 +132,9 @@ if __name__ == '__main__':
     """""
 
     args = config.config()
+    datapack = ds.datasets[args.dataset]
 
-    log_dir = f'data/cma_es/{args.run_id}/'
+    log_dir = f'data/cma_es/{datapack.env}/{args.run_id}/'
     tb = SummaryWriter(log_dir)
     global_step = 0
 
@@ -144,7 +145,6 @@ if __name__ == '__main__':
     else:
         policy_features = args.policy_inputs
 
-    datapack = ds.datasets[args.dataset]
     env = gym.make(datapack.env)
     actions = datapack.action_map.size
 
