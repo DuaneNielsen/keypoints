@@ -44,6 +44,9 @@ def config():
     parser.add_argument('--model_keypoints', type=int)
     parser.add_argument('--transporter_combine_mode', type=str)
 
+    """ policy parameters """
+    parser.add_argument('--policy_action_select_mode', type=str)
+
     """ hyper-parameters """
     parser.add_argument('--optimizer', type=str, default='Adam')
     parser.add_argument('--batch_size', type=int)

@@ -68,12 +68,15 @@ def evaluate(packet):
 
     with torch.no_grad():
 
-        def get_action(s, prepro, transform, view, policy, action_map, device):
+        def get_action(s, prepro, transform, view, policy, action_map, device, action_select_mode='argmax'):
             s = prepro(s)
             s_t = transform(s).unsqueeze(0).type(policy.dtype).to(device)
             kp = view(s_t)
             p = softmax(kp.flatten().matmul(policy), dim=0)
-            a = Categorical(p).sample()
+            if action_select_mode == 'argmax':
+                a = torch.argmax(p)
+            if action_select_mode == 'sample':
+                a = Categorical(p).sample()
             a = action_map(a)
             return a, kp
 
@@ -87,7 +90,8 @@ def evaluate(packet):
             view = nop
 
         s = env.reset()
-        a, kp = get_action(s, datapack.prepro, datapack.transforms, view, policy, datapack.action_map, args.device)
+        a, kp = get_action(s, datapack.prepro, datapack.transforms, view, policy, datapack.action_map, args.device,
+                           action_select_mode=args.policy_action_select_mode)
 
         done = False
         reward = 0.0
@@ -96,7 +100,8 @@ def evaluate(packet):
             s, r, done, i = env.step(a)
             reward += r
 
-            a, kp = get_action(s, datapack.prepro, datapack.transforms, view, policy, datapack.action_map, args.device)
+            a, kp = get_action(s, datapack.prepro, datapack.transforms, view, policy, datapack.action_map, args.device,
+                               action_select_mode=args.policy_action_select_mode)
             if render:
                 if args.model_keypoints:
                     s = datapack.prepro(s)
@@ -185,6 +190,7 @@ class NaiveCovarianceMatrixAdaptation(CMA):
 
         selected_results = ranked_results[0:self.mu]
         g = torch.stack([g['parameters'] for g in selected_results])
+
         mean_prev = self.mean.clone()
         self.mean = g.mean(0)
         g = g - mean_prev
@@ -192,6 +198,55 @@ class NaiveCovarianceMatrixAdaptation(CMA):
         self.c = (1 - self.cmu) * self.c + self.cmu * c_cma
 
         info = {'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm()}
+        self.gen_count += 1
+
+        return ranked_results, info
+
+    def __repr__(self):
+        return f'N: {self.N}, samples: {self.samples}, mu: {self.mu}, cmu: {self.cmu}'
+
+
+class SimpleCovarianceMatrixAdaptation(CMA):
+    def __init__(self, N, cma=None, samples=None):
+        self.N = N
+        self.recommended_steps = range(1, floor(1e3 * N ** 2))
+
+        self.samples = 4 + floor(3 * log(N)) * 2 if samples is None else samples
+        self.mu = self.samples // 2
+        self.gen_count = 0
+        self.cmu = self.mu / N ** 2 if cma is None else cma
+
+        # variables
+        self.mean = torch.zeros(N)
+        self.b = torch.eye(N)
+        self.d = torch.eye(N)
+        self.c = torch.matmul(self.b.matmul(self.d), self.b.matmul(self.d).T)  # c = B D D B.T
+
+    def step(self, objective_f, rank_order='max'):
+
+        # sample parameters
+        params, z = sample(self.samples, 1.0, self.mean, self.b, self.d)
+
+        # rank by fitness
+        f = objective_f(params)
+        results = [{'parameters': params[i], 'z': z[i], 'fitness': f.item()} for i, f in enumerate(f)]
+        ranked_results = self._rank(results, rank_order)
+
+        selected_results = ranked_results[0:self.mu]
+        g = torch.stack([g['parameters'] for g in selected_results])
+        z = torch.stack([g['z'] for g in selected_results])
+
+        self.mean = g.mean(0)
+        bdz = self.b.matmul(self.d).matmul(z.t())
+        c_mu = torch.matmul(bdz, torch.eye(self.mu) / self.mu)
+        c_mu = c_mu.matmul(bdz.t())
+
+        self.c = (1 - self.cmu) * self.c + self.cmu * c_mu
+
+        self.d, self.b = torch.symeig(self.c, eigenvectors=True)
+        self.d = self.d.sqrt().diag_embed()
+
+        info = {'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm(), 'max_eigv': self.d.max()}
         self.gen_count += 1
 
         return ranked_results, info
@@ -212,7 +267,7 @@ class FastCovarianceMatrixAdaptation(CMA):
                                                                            steps=floor(self.mu)).log()
         self.weights = self.weights / self.weights.sum()
         self.mu = floor(self.mu)
-        self.mueff = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
+        self.weights = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
 
         # adaptation settings
         self.cc = (4 + self.mueff / N) / (N + 4 + 2 * self.mueff / N)
@@ -307,7 +362,8 @@ class FastCovarianceMatrixAdaptation(CMA):
         self.gen_count += 1
 
         info = {'step_size': self.step_size, 'correlation': correlation,
-                'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm()}
+                'fitness_max': f.max(), 'fitness_mean': f.mean(), 'c_norm': self.c.norm(),
+                'max_eigv': self.d.max()}
         return ranked_results, info
 
     def __repr__(self):
@@ -342,8 +398,10 @@ if __name__ == '__main__':
                                              samples=args.cma_samples)
     elif args.cma_algo == 'naive':
         cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(), samples=args.cma_samples)
+    elif args.cma_algo == 'simple':
+        cma = SimpleCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(), samples=args.cma_samples)
     else:
-        raise Exception('--cma_algo fast | naive')
+        raise Exception('--cma_algo fast | naive | simple')
 
     tb.add_text('args', str(args), global_step)
     tb.add_text('cma_params', str(cma), global_step)
