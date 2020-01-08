@@ -193,10 +193,10 @@ if __name__ == '__main__':
         c_p = c.clone().to(args.device)
 
         m = g.mean(0)
-        #g = g - m_p
-        #c = (g.T.matmul(g) / (g.size(0))
-        rank_mu_term = torch.matmul(b, torch.matmul(d, z))
-        c = rank_mu_term.T.matmul(rank_mu_term)
+        g = g - m_p
+        c = g.T.matmul(g) / g.size(0)
+        #rank_mu_term = torch.matmul(b, torch.matmul(d, z.T))
+        #c = rank_mu_term.T.matmul(rank_mu_term)
         covariance_discount = num_candidates // 4 / m.size(0) ** 2
         c = (1 - covariance_discount) * c_p + covariance_discount * c
 
@@ -204,8 +204,8 @@ if __name__ == '__main__':
         #d, b = torch.from_numpy(d).to(args.device), torch.from_numpy(b).to(args.device)
 
         # decompose covariance matrix into eigevectors and rescale to stdev
-        d, b = c.symeig(True)
-        d = d.sqrt().diag_embed()
+        #d, b = c.symeig(True)
+        #d = d.sqrt().diag_embed()
 
         global_step += 1
 
