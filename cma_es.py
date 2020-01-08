@@ -13,6 +13,7 @@ import datasets as ds
 import gym
 import multiprocessing as mp
 
+
 def nop(s_t):
     return s_t
 
@@ -196,7 +197,7 @@ class NaiveCovarianceMatrixAdaptation(CMA):
         return ranked_results, info
 
     def __repr__(self):
-        return f'N: {self.N}, mu: {self.mu}, cmu: {self.cmu}'
+        return f'N: {self.N}, samples: {self.samples}, mu: {self.mu}, cmu: {self.cmu}'
 
 
 class FastCovarianceMatrixAdaptation(CMA):
@@ -224,7 +225,7 @@ class FastCovarianceMatrixAdaptation(CMA):
         self.step_mode = step_mode
         if step_mode == 'decay' and step_decay is None:
             raise Exception('decay mode requires you set a step decay')
-        self.step_decay = 1.0 - step_decay
+        self.step_decay = (1.0 - step_decay) if step_decay is not None else None
 
         # variables
         self.mean = torch.zeros(N)
@@ -310,7 +311,9 @@ class FastCovarianceMatrixAdaptation(CMA):
         return ranked_results, info
 
     def __repr__(self):
-        return f'N: {self.N}, mu: {self.mu}, mueff: {self.mueff}, cc: {self.cc}, cs: {self.cs}, c1: {self.c1}, cmu: {self.cmu}, damps: {self.damps}, chiN: {self.chiN}'
+        return f'N: {self.N}, samples: {self.samples}, mu: {self.mu}, mueff: {self.mueff}, cc: {self.cc}, ' \
+               f'cs: {self.cs}, c1: {self.c1}, cmu: {self.cmu}, damps: {self.damps}, chiN: {self.chiN}, ' \
+               f'step_mode: {self.step_mode}, step_decay: {self.step_decay}, step_size: {self.step_size}'
 
 
 if __name__ == '__main__':
@@ -367,5 +370,3 @@ if __name__ == '__main__':
 
         if args.epochs is not None and step >= args.epochs:
             break
-
-
