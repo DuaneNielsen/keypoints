@@ -266,9 +266,10 @@ class FastCovarianceMatrixAdaptation(CMA):
         self.weights = torch.tensor([log(self.mu + 0.5)]) - torch.linspace(start=1, end=self.mu,
                                                                            steps=floor(self.mu)).log()
         self.weights = self.weights / self.weights.sum()
+        self.weights = self.weights / self.weights.sum()
         self.mu = floor(self.mu)
         self.mueff = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
-        self.weights = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
+
 
         # adaptation settings
         self.cc = (4 + self.mueff / N) / (N + 4 + 2 * self.mueff / N)
