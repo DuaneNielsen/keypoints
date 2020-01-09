@@ -11,6 +11,7 @@ from models import transporter
 from models import functional as KF
 import datasets as ds
 import gym
+import gym_wrappers
 import multiprocessing as mp
 
 
@@ -63,6 +64,9 @@ def evaluate(packet):
 
     datapack = ds.datasets[args.dataset]
     env = gym.make(datapack.env)
+    if args.gym_reward_count_limit is not None:
+        env = gym_wrappers.RewardCountLimit(env, args.gym_reward_count_limit)
+
     actions = datapack.action_map.size
     policy = packet.weights.reshape(features, actions)
 
@@ -212,7 +216,7 @@ class SimpleCovarianceMatrixAdaptation(CMA):
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
 
         self.samples = 4 + floor(3 * log(N)) * 2 if samples is None else samples
-        self.mu = self.samples // 2
+        self.mu = self.samples // 4
         self.gen_count = 0
         self.cmu = self.mu / N ** 2 if cma is None else cma
 
@@ -377,6 +381,8 @@ class FastCovarianceMatrixAdaptation(CMA):
 if __name__ == '__main__':
 
     args = config.config()
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
     datapack = ds.datasets[args.dataset]
     log_dir = f'data/cma_es/{datapack.env}/{args.run_id}/'
     tb = SummaryWriter(log_dir)

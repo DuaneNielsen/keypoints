@@ -24,6 +24,7 @@ def config():
     parser.add_argument('--config', type=str, default=None)
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--processes', type=int)
+    parser.add_argument('--seed', type=int, default=None)
 
     """cma params"""
     parser.add_argument('--cma_algo', type=str)
@@ -46,6 +47,9 @@ def config():
 
     """ policy parameters """
     parser.add_argument('--policy_action_select_mode', type=str)
+
+    """ gym env parameters """
+    parser.add_argument('--gym_reward_count_limit', type=int, default=None)
 
     """ hyper-parameters """
     parser.add_argument('--optimizer', type=str, default='Adam')
