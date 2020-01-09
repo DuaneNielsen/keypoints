@@ -267,6 +267,7 @@ class FastCovarianceMatrixAdaptation(CMA):
                                                                            steps=floor(self.mu)).log()
         self.weights = self.weights / self.weights.sum()
         self.mu = floor(self.mu)
+        self.mueff = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
         self.weights = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
 
         # adaptation settings
