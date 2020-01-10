@@ -61,7 +61,7 @@ def call_evaluate(packet):
     return evaluate(packet.args, packet.weights, packet.features, render=packet.render)
 
 
-def evaluate(args, weights, features, render=False):
+def evaluate(args, weights, features, render=False, record=False):
 
     datapack = ds.datasets[args.dataset]
     env = gym.make(datapack.env)
@@ -108,17 +108,22 @@ def evaluate(args, weights, features, render=False):
 
             a, kp = get_action(s, datapack.prepro, datapack.transforms, view, policy, datapack.action_map, args.device,
                                action_select_mode=args.policy_action_select_mode)
-            if render:
+
+            if render or record:
                 if args.model_keypoints:
                     s = datapack.prepro(s)
                     s = TVF.to_tensor(s).unsqueeze(0)
                     s = plot_keypoints_on_image(kp[0], s[0])
-                    v.render(s)
-                    video.append(s)
+                    if render:
+                        v.render(s)
+                    if record:
+                        video.append(s)
                 else:
-                    env.render()
+                    video.append(s)
+                    if render:
+                        env.render()
 
-    if render and len(video) != 0:
+    if record and len(video) != 0:
         video = np.expand_dims(np.stack(video), axis=0)
         video = torch.from_numpy(video).permute(0, 1, 4, 2, 3)
         tb.add_video('action replay', video, global_step)
@@ -126,13 +131,22 @@ def evaluate(args, weights, features, render=False):
     return reward
 
 
-class AtariMpEvaluator(object):
-    def __init__(self, args, datapack, policy_features, policy_actions, render=False):
+class AtariEval(object):
+    def __init__(self, args, datapack, policy_features, policy_actions, render=False, record=False):
         self.args = args
         self.datapack = datapack
         self.policy_features = policy_features
         self.policy_actions = policy_actions
         self.render = render
+        self.record = record
+
+    def len_policy_weights(self):
+        return self.policy_features * self.policy_actions
+
+
+class AtariMpEvaluator(AtariEval):
+    def __init__(self, args, datapack, policy_features, policy_actions, render=False, record=False):
+        super().__init__(args, datapack, policy_features, policy_actions, render=render, record=record)
 
     def fitness(self, candidates):
         weights = torch.unbind(candidates, dim=0)
@@ -145,24 +159,13 @@ class AtariMpEvaluator(object):
         results = torch.tensor(results)
         return results
 
-    def len_policy_weights(self):
-        return self.policy_features * self.policy_actions
 
-
-class AtariSpEvaluator(object):
-    def __init__(self, args, datapack, policy_features, policy_actions, render=False):
-        self.args = args
-        self.datapack = datapack
-        self.policy_features = policy_features
-        self.policy_actions = policy_actions
-        self.render = render
+class AtariSpEvaluator(AtariEval):
+    def __init__(self, args, datapack, policy_features, policy_actions, render=False, record=False):
+        super().__init__(args, datapack, policy_features, policy_actions, render=render, record=record)
 
     def fitness(self, weights):
-        return [evaluate(self.args, w, self.policy_features, self.render) for w in torch.unbind(weights, dim=0)]
-
-    def len_policy_weights(self):
-        return self.policy_features * self.policy_actions
-
+        return [evaluate(self.args, w, self.policy_features, self.render, self.record) for w in torch.unbind(weights, dim=0)]
 
 
 def sample(n, sigma, mean, B, D):
@@ -427,7 +430,8 @@ if __name__ == '__main__':
         policy_features = args.policy_inputs
 
     evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
-    demo = AtariSpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
+    demo = AtariSpEvaluator(args, datapack, policy_features, datapack.action_map.size,
+                            render=args.display, record=True)
 
     if args.cma_algo == 'fast':
         cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
@@ -464,7 +468,7 @@ if __name__ == '__main__':
             torch.save(ranked_results[0]['parameters'], log_dir + 'best_of_generation.pt')
             show = True
 
-        if args.display and (global_step % args.display_freq == 0 or show):
+        if global_step % args.display_freq == 0 or show:
             demo.fitness(ranked_results[0]['parameters'].unsqueeze(0))
 
         show = False
