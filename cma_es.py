@@ -219,7 +219,7 @@ class SimpleCovarianceMatrixAdaptation(CMA):
 
         self.samples = 4 + floor(3 * log(N)) * 2 if samples is None else samples
         self.oversample = oversample
-        self.mu = self.samples // 4
+        self.mu = self.samples // 2
         self.gen_count = 0
         self.cmu = self.mu / N ** 2 if cma is None else cma
 
