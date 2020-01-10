@@ -174,19 +174,21 @@ class CMA(object):
 
 
 class NaiveCovarianceMatrixAdaptation(CMA):
-    def __init__(self, N, cma=None, samples=None):
+    def __init__(self, N, cma=None, samples=None, oversample=0):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
         # variables
         self.mean = torch.zeros(N)
         self.c = torch.eye(N)
         self.samples = 4 + floor(3 * log(N)) * 2 if samples is None else samples
+        self.oversample = oversample
         self.mu = self.samples // 2
         self.gen_count = 0
         self.cmu = self.mu / N ** 2 if cma is None else cma
 
     def step(self, objective_f, rank_order='max'):
-        params = simple_sample(self.N, self.samples, self.mean, self.c)
+        params = simple_sample(self.N, self.samples + floor(self.oversample), self.mean, self.c)
+        self.oversample = self.oversample * 0.8
         # rank by fitness
         f = objective_f(params)
         results = [{'parameters': params[i], 'fitness': f.item()} for i, f in enumerate(f)]
@@ -211,11 +213,12 @@ class NaiveCovarianceMatrixAdaptation(CMA):
 
 
 class SimpleCovarianceMatrixAdaptation(CMA):
-    def __init__(self, N, cma=None, samples=None):
+    def __init__(self, N, cma=None, samples=None, oversample=0):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
 
         self.samples = 4 + floor(3 * log(N)) * 2 if samples is None else samples
+        self.oversample = oversample
         self.mu = self.samples // 4
         self.gen_count = 0
         self.cmu = self.mu / N ** 2 if cma is None else cma
@@ -229,7 +232,8 @@ class SimpleCovarianceMatrixAdaptation(CMA):
     def step(self, objective_f, rank_order='max'):
 
         # sample parameters
-        params, z = sample(self.samples, 1.0, self.mean, self.b, self.d)
+        params, z = sample(self.samples + floor(self.oversample), 1.0, self.mean, self.b, self.d)
+        self.oversample = self.oversample * 0.8
 
         # rank by fitness
         f = objective_f(params)
@@ -260,12 +264,13 @@ class SimpleCovarianceMatrixAdaptation(CMA):
 
 
 class FastCovarianceMatrixAdaptation(CMA):
-    def __init__(self, N, step_mode='auto', step_decay=None, initial_step_size=None, samples=None):
+    def __init__(self, N, step_mode='auto', step_decay=None, initial_step_size=None, samples=None, oversample=0.0):
         self.N = N
         self.recommended_steps = range(1, floor(1e3 * N ** 2))
 
         # selection settings
         self.samples = 4 + floor(3 * log(N)) if samples is None else samples
+        self.oversample = oversample
         self.mu = self.samples / 2
         self.weights = torch.tensor([log(self.mu + 0.5)]) - torch.linspace(start=1, end=self.mu,
                                                                            steps=floor(self.mu)).log()
@@ -273,7 +278,6 @@ class FastCovarianceMatrixAdaptation(CMA):
         self.weights = self.weights / self.weights.sum()
         self.mu = floor(self.mu)
         self.mueff = (self.weights.sum() ** 2 / (self.weights ** 2).sum()).item()
-
 
         # adaptation settings
         self.cc = (4 + self.mueff / N) / (N + 4 + 2 * self.mueff / N)
@@ -301,7 +305,8 @@ class FastCovarianceMatrixAdaptation(CMA):
     def step(self, objective_f, rank_order='max'):
 
         # sample parameters
-        s, z = sample(self.samples, self.step_size, self.mean, self.b, self.d)
+        s, z = sample(self.samples + floor(self.oversample), self.step_size, self.mean, self.b, self.d)
+        self.oversample = self.oversample * 0.8
 
         # rank by fitness
         f = objective_f(s)
@@ -403,11 +408,16 @@ if __name__ == '__main__':
                                              step_mode=args.cma_step_mode,
                                              step_decay=args.cma_step_decay,
                                              initial_step_size=args.cma_initial_step_size,
-                                             samples=args.cma_samples)
+                                             samples=args.cma_samples,
+                                             oversample=args.cma_oversample)
     elif args.cma_algo == 'naive':
-        cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(), samples=args.cma_samples)
+        cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
+                                              samples=args.cma_samples,
+                                              oversample=args.cma_oversample)
     elif args.cma_algo == 'simple':
-        cma = SimpleCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(), samples=args.cma_samples)
+        cma = SimpleCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
+                                               samples=args.cma_samples,
+                                               oversample=args.cma_oversample)
     else:
         raise Exception('--cma_algo fast | naive | simple')
 

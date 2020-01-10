@@ -32,6 +32,7 @@ def config():
     parser.add_argument('--cma_step_decay', type=float, default=None)
     parser.add_argument('--cma_initial_step_size', type=float, default=None)
     parser.add_argument('--cma_samples', type=int, default=None)
+    parser.add_argument('--cma_oversample', type=int, default=0)
 
     """ visualization params """
     parser.add_argument('--display', action='store_true')
