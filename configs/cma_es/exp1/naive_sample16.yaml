@@ -1,0 +1,25 @@
+checkpoint_freq: 1
+seed: 1
+
+cma_algo: naive
+cma_step_mode: auto
+cma_step_decay: 0.001
+cma_initial_step_size: 0.5
+cma_samples: 16
+cma_oversample: 512
+
+gym_reward_count_limit: 5
+
+policy_action_select_mode: argmax
+
+model_type: VGG_PONG_LAYERNECK
+model_in_channels: 3
+model_z_channels : 16
+model_keypoints : 3
+load: /home/duane/keypoints/data/models/transporter/VGG_PONG_LAYERNECK/run_40/best/
+dataset: pong_color
+
+
+
+epochs: 60
+opt_level: O2
