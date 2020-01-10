@@ -11,3 +11,4 @@ pyyaml
 tensorboard
 apex
 scikit-image
+moviepy

@@ -12,8 +12,8 @@ from models import functional as KF
 import datasets as ds
 import gym
 import gym_wrappers
-import multiprocessing as mp
-
+import torch.multiprocessing as mp
+import numpy as np
 
 def nop(s_t):
     return s_t
@@ -52,15 +52,16 @@ def encode(args, datapack, weights, features, render):
 
 
 def decode(packet):
-    packet.weights = torch.from_numpy(packet.weights).to(packet.args.device)
+    packet.weights = torch.from_numpy(packet.weights)
     return packet
 
 
-def evaluate(packet):
+def call_evaluate(packet):
     packet = decode(packet)
-    args = packet.args
-    features = packet.features
-    render = packet.render
+    return evaluate(packet.args, packet.weights, packet.features, render=packet.render)
+
+
+def evaluate(args, weights, features, render=False):
 
     datapack = ds.datasets[args.dataset]
     env = gym.make(datapack.env)
@@ -68,7 +69,8 @@ def evaluate(packet):
         env = gym_wrappers.RewardCountLimit(env, args.gym_reward_count_limit)
 
     actions = datapack.action_map.size
-    policy = packet.weights.reshape(features, actions)
+    policy = weights.reshape(features, actions).to(args.device)
+    video = []
 
     with torch.no_grad():
 
@@ -112,8 +114,14 @@ def evaluate(packet):
                     s = TVF.to_tensor(s).unsqueeze(0)
                     s = plot_keypoints_on_image(kp[0], s[0])
                     v.render(s)
+                    video.append(s)
                 else:
                     env.render()
+
+    if render and len(video) != 0:
+        video = np.expand_dims(np.stack(video), axis=0)
+        video = torch.from_numpy(video).permute(0, 1, 4, 2, 3)
+        tb.add_video('action replay', video, global_step)
 
     return reward
 
@@ -132,13 +140,29 @@ class AtariMpEvaluator(object):
         worker_args = [encode(self.args, self.datapack, w, self.policy_features, self.render) for w in weights]
 
         with mp.Pool(processes=args.processes) as pool:
-            results = pool.map(evaluate, worker_args)
+            results = pool.map(call_evaluate, worker_args)
 
         results = torch.tensor(results)
         return results
 
     def len_policy_weights(self):
         return self.policy_features * self.policy_actions
+
+
+class AtariSpEvaluator(object):
+    def __init__(self, args, datapack, policy_features, policy_actions, render=False):
+        self.args = args
+        self.datapack = datapack
+        self.policy_features = policy_features
+        self.policy_actions = policy_actions
+        self.render = render
+
+    def fitness(self, weights):
+        return [evaluate(self.args, w, self.policy_features, self.render) for w in torch.unbind(weights, dim=0)]
+
+    def len_policy_weights(self):
+        return self.policy_features * self.policy_actions
+
 
 
 def sample(n, sigma, mean, B, D):
@@ -385,6 +409,8 @@ class FastCovarianceMatrixAdaptation(CMA):
 
 if __name__ == '__main__':
 
+    mp.set_start_method('spawn')
+
     args = config.config()
     if args.seed is not None:
         torch.manual_seed(args.seed)
@@ -401,7 +427,7 @@ if __name__ == '__main__':
         policy_features = args.policy_inputs
 
     evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
-    demo = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
+    demo = AtariSpEvaluator(args, datapack, policy_features, datapack.action_map.size, render=True)
 
     if args.cma_algo == 'fast':
         cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
