@@ -67,7 +67,7 @@ def call_evaluate(packet):
 
 
 def get_policy(features, actions):
-    return nn.Linear(features, actions)
+    return nn.Sequential(nn.Linear(features, features), nn.ReLU(), nn.Linear(features, actions))
 
 
 def evaluate(args, weights, features, render=False, record=False):
