@@ -478,6 +478,9 @@ if __name__ == '__main__':
         if ranked_results[0]['fitness'] > best_reward:
             best_reward = ranked_results[0]['fitness']
             torch.save(ranked_results[0]['parameters'], log_dir + 'best_of_generation.pt')
+            _p = get_policy(policy_features, datapack.action_map.size)
+            _p = knn.load_weights(_p, weights=ranked_results[0]['parameters'])
+            torch.save(_p.state_dict(), log_dir + 'best_policy.mdl')
             show = True
 
         if global_step % args.display_freq == 0 or show:
