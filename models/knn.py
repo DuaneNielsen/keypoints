@@ -213,13 +213,13 @@ class Transporter(nn.Module):
         return phi_xs * (1 - heta_xs) * (1 - heta_xt) + phi_xs * heta_xt
 
 
-def unflatten(module, weights):
+def load_weights(module, weights):
 
     start = 0
     end = 0
     for p in module.parameters():
         end += p.numel()
-        p = weights[start:end].reshape(p.shape)
+        p.data = weights[start:end].reshape(p.shape)
         start += p.numel()
     return module
 

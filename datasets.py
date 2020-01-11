@@ -298,13 +298,23 @@ celeba_transform = transforms.Compose([
 
 
 class ActionMap(object):
-    def __init__(self, size, f=None):
+    def __init__(self, size=None, f=None, map=None):
         super().__init__()
-        self.size = size
+        self.size = size if size else len(map)
+        self.map = map
+        # pickle hates lambdas, so we going to...
         if f:
             self.f = f
+        elif map is not None:
+            self.f = self._mapf
         else:
-            self.f = lambda a: a
+            self.f = self._nop
+
+    def _nop(self, a):
+        return a
+
+    def _mapf(self, a):
+        return self.map[a]
 
     def __call__(self, a):
         return self.f(a)
@@ -312,6 +322,9 @@ class ActionMap(object):
 
 def pong_action_map(a):
     return a + 2
+
+
+nop_left_right = [0, 2, 3]  # 'NOOP', 'LEFT', 'RIGHT'
 
 
 def pacman_action_map(a):
@@ -327,6 +340,7 @@ datasets = {
     'square': SquareDataPack(),
     'pong': AtariDataPack('pong', 'Pong-v0', pong_prepro, grey_transform, ActionMap(2, pong_action_map)),
     'pong_color': AtariDataPack('pong_color', 'Pong-v0', pong_color_prepro, color_transform, ActionMap(2, pong_action_map)),
+    'pong_color_3_act': AtariDataPack('pong_color', 'Pong-v0', pong_color_prepro, color_transform, ActionMap(map=nop_left_right)),
     'pacman': AtariDataPack('pacman', 'MsPacman-v0', pacman_color_prepro, color_transform, ActionMap(4, pacman_action_map)),
     'cartpole': AtariDataPack('cartpole', 'CartPole-v0', nop, torch.from_numpy, ActionMap(2, box2d_discrete))
 }

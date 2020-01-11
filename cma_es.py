@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import models.knn as knn
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 from math import floor, sqrt, log
 import config
 from torch import softmax
@@ -17,6 +18,8 @@ import gym
 import gym_wrappers
 import torch.multiprocessing as mp
 import numpy as np
+
+
 
 def nop(s_t):
     return s_t
@@ -64,7 +67,7 @@ def call_evaluate(packet):
 
 
 def get_policy(features, actions):
-    return  nn.Linear(features, actions)
+    return nn.Linear(features, actions)
 
 
 def evaluate(args, weights, features, render=False, record=False):
@@ -76,7 +79,7 @@ def evaluate(args, weights, features, render=False, record=False):
 
     actions = datapack.action_map.size
     policy = get_policy(features, actions)
-    policy = knn.unflatten(policy, weights)
+    policy = knn.load_weights(policy, weights)
     policy = policy.to(args.device)
     policy_dtype = next(policy.parameters()).dtype
 
