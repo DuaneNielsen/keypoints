@@ -211,3 +211,22 @@ class Transporter(nn.Module):
 
     def forward(self, phi_xs, heta_xs, phi_xt, heta_xt):
         return phi_xs * (1 - heta_xs) * (1 - heta_xt) + phi_xs * heta_xt
+
+
+def unflatten(module, weights):
+
+    start = 0
+    end = 0
+    for p in module.parameters():
+        end += p.numel()
+        p = weights[start:end].reshape(p.shape)
+        start += p.numel()
+    return module
+
+
+def flatten(module):
+    return torch.cat([p.flatten() for p in module.parameters()])
+
+
+def parameter_count(module):
+    return sum([p.numel() for p in module.parameters()])

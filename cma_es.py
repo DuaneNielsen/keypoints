@@ -1,11 +1,14 @@
 import torch
 import torch.nn as nn
+import models.knn as knn
 from torch.utils.tensorboard import SummaryWriter
 from math import floor, sqrt, log
 import config
 from torch import softmax
 from torch.distributions import Categorical, MultivariateNormal
 import torchvision.transforms.functional as TVF
+
+import models.knn
 from utils import UniImageViewer, plot_keypoints_on_image
 from models import transporter
 from models import functional as KF
@@ -17,7 +20,6 @@ import numpy as np
 
 def nop(s_t):
     return s_t
-
 
 class Keypoints(nn.Module):
     def __init__(self, transporter_net):
@@ -61,6 +63,10 @@ def call_evaluate(packet):
     return evaluate(packet.args, packet.weights, packet.features, render=packet.render)
 
 
+def get_policy(features, actions):
+    return  nn.Linear(features, actions)
+
+
 def evaluate(args, weights, features, render=False, record=False):
 
     datapack = ds.datasets[args.dataset]
@@ -69,16 +75,20 @@ def evaluate(args, weights, features, render=False, record=False):
         env = gym_wrappers.RewardCountLimit(env, args.gym_reward_count_limit)
 
     actions = datapack.action_map.size
-    policy = weights.reshape(features, actions).to(args.device)
+    policy = get_policy(features, actions)
+    policy = knn.unflatten(policy, weights)
+    policy = policy.to(args.device)
+    policy_dtype = next(policy.parameters()).dtype
+
     video = []
 
     with torch.no_grad():
 
         def get_action(s, prepro, transform, view, policy, action_map, device, action_select_mode='argmax'):
             s = prepro(s)
-            s_t = transform(s).unsqueeze(0).type(policy.dtype).to(device)
+            s_t = transform(s).unsqueeze(0).type(policy_dtype).to(device)
             kp = view(s_t)
-            p = softmax(kp.flatten().matmul(policy), dim=0)
+            p = softmax(policy(kp.flatten()), dim=0)
             if action_select_mode == 'argmax':
                 a = torch.argmax(p)
             if action_select_mode == 'sample':
@@ -119,7 +129,7 @@ def evaluate(args, weights, features, render=False, record=False):
                     if record:
                         video.append(s)
                 else:
-                    video.append(s)
+                    video.append(env.render(mode='rgb_array'))
                     if render:
                         env.render()
 
@@ -139,9 +149,6 @@ class AtariEval(object):
         self.policy_actions = policy_actions
         self.render = render
         self.record = record
-
-    def len_policy_weights(self):
-        return self.policy_features * self.policy_actions
 
 
 class AtariMpEvaluator(AtariEval):
@@ -429,23 +436,25 @@ if __name__ == '__main__':
     else:
         policy_features = args.policy_inputs
 
+    N = knn.parameter_count(get_policy(policy_features, datapack.action_map.size))
+
     evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
     demo = AtariSpEvaluator(args, datapack, policy_features, datapack.action_map.size,
                             render=args.display, record=True)
 
     if args.cma_algo == 'fast':
-        cma = FastCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
+        cma = FastCovarianceMatrixAdaptation(N=N,
                                              step_mode=args.cma_step_mode,
                                              step_decay=args.cma_step_decay,
                                              initial_step_size=args.cma_initial_step_size,
                                              samples=args.cma_samples,
                                              oversample=args.cma_oversample)
     elif args.cma_algo == 'naive':
-        cma = NaiveCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
+        cma = NaiveCovarianceMatrixAdaptation(N=N,
                                               samples=args.cma_samples,
                                               oversample=args.cma_oversample)
     elif args.cma_algo == 'simple':
-        cma = SimpleCovarianceMatrixAdaptation(N=evaluator.len_policy_weights(),
+        cma = SimpleCovarianceMatrixAdaptation(N=N,
                                                samples=args.cma_samples,
                                                oversample=args.cma_oversample)
     else:
