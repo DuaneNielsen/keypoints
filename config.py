@@ -48,6 +48,7 @@ def config():
 
     """ policy parameters """
     parser.add_argument('--policy_action_select_mode', type=str)
+    parser.add_argument('--policy_depth', type=int)
 
     """ gym env parameters """
     parser.add_argument('--gym_reward_count_limit', type=int, default=None)

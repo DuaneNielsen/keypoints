@@ -10,6 +10,7 @@ cma_oversample: 512
 gym_reward_count_limit: 5
 
 policy_action_select_mode: argmax
+policy_depth: 2
 
 model_type: VGG_PONG_LAYERNECK
 model_in_channels: 3

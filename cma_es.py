@@ -36,7 +36,7 @@ class Keypoints(nn.Module):
 
 
 class EvalPacket():
-    def __init__(self, args, datapack, weights, features, render):
+    def __init__(self, args, datapack, weights, features, depth, render):
         """
         Serializable arguments for eval function
         :param args:
@@ -49,11 +49,12 @@ class EvalPacket():
         self.weights = weights
         self.render = render
         self.features = features
+        self.depth = depth
 
 
-def encode(args, datapack, weights, features, render):
+def encode(args, datapack, weights, features, depth, render):
     weights = weights.cpu().numpy()
-    return EvalPacket(args, datapack, weights, features, render)
+    return EvalPacket(args, datapack, weights, features, depth, render)
 
 
 def decode(packet):
@@ -63,14 +64,17 @@ def decode(packet):
 
 def call_evaluate(packet):
     packet = decode(packet)
-    return evaluate(packet.args, packet.weights, packet.features, render=packet.render)
+    return evaluate(packet.args, packet.weights, packet.features, packet.depth, render=packet.render)
 
 
-def get_policy(features, actions):
-    return nn.Sequential(nn.Linear(features, features), nn.ReLU(), nn.Linear(features, actions))
+def get_policy(features, actions, depth):
+    blocks = []
+    for _ in range(0, depth):
+        blocks += [nn.Linear(features, features), nn.ReLU()]
+    return nn.Sequential(*blocks, nn.Linear(features, actions), nn.Softmax(dim=0))
 
 
-def evaluate(args, weights, features, render=False, record=False):
+def evaluate(args, weights, features, depth, render=False, record=False):
 
     datapack = ds.datasets[args.dataset]
     env = gym.make(datapack.env)
@@ -78,7 +82,7 @@ def evaluate(args, weights, features, render=False, record=False):
         env = gym_wrappers.RewardCountLimit(env, args.gym_reward_count_limit)
 
     actions = datapack.action_map.size
-    policy = get_policy(features, actions)
+    policy = get_policy(features, actions, depth)
     policy = knn.load_weights(policy, weights)
     policy = policy.to(args.device)
     policy_dtype = next(policy.parameters()).dtype
@@ -91,7 +95,7 @@ def evaluate(args, weights, features, render=False, record=False):
             s = prepro(s)
             s_t = transform(s).unsqueeze(0).type(policy_dtype).to(device)
             kp = view(s_t)
-            p = softmax(policy(kp.flatten()), dim=0)
+            p = policy(kp.flatten())
             if action_select_mode == 'argmax':
                 a = torch.argmax(p)
             if action_select_mode == 'sample':
@@ -145,23 +149,24 @@ def evaluate(args, weights, features, render=False, record=False):
 
 
 class AtariEval(object):
-    def __init__(self, args, datapack, policy_features, policy_actions, render=False, record=False):
+    def __init__(self, args, datapack, policy_features, policy_actions, policy_depth, render=False, record=False):
         self.args = args
         self.datapack = datapack
         self.policy_features = policy_features
         self.policy_actions = policy_actions
+        self.policy_depth = policy_depth
         self.render = render
         self.record = record
 
 
 class AtariMpEvaluator(AtariEval):
-    def __init__(self, args, datapack, policy_features, policy_actions, render=False, record=False):
-        super().__init__(args, datapack, policy_features, policy_actions, render=render, record=record)
+    def __init__(self, args, datapack, policy_features, policy_actions, policy_depth, render=False, record=False):
+        super().__init__(args, datapack, policy_features, policy_actions, policy_depth, render=render, record=record)
 
     def fitness(self, candidates):
         weights = torch.unbind(candidates, dim=0)
 
-        worker_args = [encode(self.args, self.datapack, w, self.policy_features, self.render) for w in weights]
+        worker_args = [encode(self.args, self.datapack, w, self.policy_features, self.policy_depth, self.render) for w in weights]
 
         with mp.Pool(processes=args.processes) as pool:
             results = pool.map(call_evaluate, worker_args)
@@ -171,11 +176,11 @@ class AtariMpEvaluator(AtariEval):
 
 
 class AtariSpEvaluator(AtariEval):
-    def __init__(self, args, datapack, policy_features, policy_actions, render=False, record=False):
-        super().__init__(args, datapack, policy_features, policy_actions, render=render, record=record)
+    def __init__(self, args, datapack, policy_features, policy_actions, policy_depth, render=False, record=False):
+        super().__init__(args, datapack, policy_features, policy_actions, policy_depth, render=render, record=record)
 
     def fitness(self, weights):
-        return [evaluate(self.args, w, self.policy_features, self.render, self.record) for w in torch.unbind(weights, dim=0)]
+        return [evaluate(self.args, w, self.policy_features, self.policy_depth, self.render, self.record) for w in torch.unbind(weights, dim=0)]
 
 
 def sample(n, sigma, mean, B, D):
@@ -439,10 +444,10 @@ if __name__ == '__main__':
     else:
         policy_features = args.policy_inputs
 
-    N = knn.parameter_count(get_policy(policy_features, datapack.action_map.size))
+    N = knn.parameter_count(get_policy(policy_features, args.policy_depth, datapack.action_map.size))
 
-    evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size)
-    demo = AtariSpEvaluator(args, datapack, policy_features, datapack.action_map.size,
+    evaluator = AtariMpEvaluator(args, datapack, policy_features, datapack.action_map.size, args.policy_depth)
+    demo = AtariSpEvaluator(args, datapack, policy_features, datapack.action_map.size, args.policy_depth,
                             render=args.display, record=True)
 
     if args.cma_algo == 'fast':
@@ -478,7 +483,7 @@ if __name__ == '__main__':
         if ranked_results[0]['fitness'] > best_reward:
             best_reward = ranked_results[0]['fitness']
             torch.save(ranked_results[0]['parameters'], log_dir + 'best_of_generation.pt')
-            _p = get_policy(policy_features, datapack.action_map.size)
+            _p = get_policy(policy_features, datapack.action_map.size, args.policy_depth)
             _p = knn.load_weights(_p, weights=ranked_results[0]['parameters'])
             torch.save(_p.state_dict(), log_dir + 'best_policy.mdl')
             show = True

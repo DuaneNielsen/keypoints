@@ -12,3 +12,4 @@ cma_step_decay: 0.001
 cma_oversample: 0
 
 policy_action_select_mode: argmax
+policy_depth: 1
