@@ -4,10 +4,10 @@ from tqdm import tqdm
 from torch.optim import Adam
 
 from data_augments import TpsAndRotate, nop
-from models import vgg, keynet
+from models import keynet
 from utils import ResultsLogger
 from apex import amp
-import datasets as ds
+from ds import datasets as ds
 from config import config
 
 

@@ -7,7 +7,7 @@ from data_augments import TpsAndRotate, nop
 from models import transporter
 from utils import ResultsLogger
 from apex import amp
-import datasets as ds
+from ds import datasets as ds
 from config import config
 
 

@@ -5,15 +5,13 @@ import models.knn as knn
 from tensorboardX import SummaryWriter
 from math import floor, sqrt, log
 import config
-from torch import softmax
-from torch.distributions import Categorical, MultivariateNormal
+from torch.distributions import Categorical
 import torchvision.transforms.functional as TVF
 
-import models.knn
 from utils import UniImageViewer, plot_keypoints_on_image
 from models import transporter
 from models import functional as KF
-import datasets as ds
+from ds import datasets as ds
 import gym
 import gym_wrappers
 import torch.multiprocessing as mp
@@ -24,7 +22,19 @@ import numpy as np
 def nop(s_t):
     return s_t
 
+
 class Keypoints(nn.Module):
+    def __init__(self, transporter_net):
+        super().__init__()
+        self.transporter_net = transporter_net
+
+    def forward(self, s_t):
+        heatmap = self.transporter_net.keypoint(s_t)
+        kp = KF.spacial_logsoftmax(heatmap)
+        return kp
+
+
+class KeypointsAndPatches(nn.Module):
     def __init__(self, transporter_net):
         super().__init__()
         self.transporter_net = transporter_net

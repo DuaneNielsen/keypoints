@@ -1,8 +1,8 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-import datasets as d
-from datasets import Pos, SquareDataset, AtariDataset, pong_prepro, if_done_or_nonzero_reward
+from ds import datasets as d
+from ds.datasets import Pos, SquareDataset, AtariDataset, if_done_or_nonzero_reward
 from torch.utils.data import DataLoader
 import gym
 from utils import UniImageViewer

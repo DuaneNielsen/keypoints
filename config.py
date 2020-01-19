@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 
 
-def config():
+def config(args=None):
     """
     Reads the command switches and creates a config
     Command line switches override config files
@@ -21,7 +21,7 @@ def config():
     parser.add_argument('--transfer_load', type=str, default=None)
     parser.add_argument('--checkpoint_freq', type=int)
     parser.add_argument('--data_root', type=str, default='data')
-    parser.add_argument('--config', type=str, default=None)
+    parser.add_argument('-c', '--config', type=str, default=None)
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--processes', type=int)
     parser.add_argument('--seed', type=int, default=None)
@@ -68,27 +68,40 @@ def config():
     parser.add_argument('--data_aug_tps_variance', type=float)
     parser.add_argument('--data_aug_max_rotate', type=float)
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
-    def load_if_not_set(filepath, args):
-        """
-        Adds the update to args if it's not loaded
-        :param filepath:
-        :return:
-        """
-        with Path(filepath).open() as f:
-            conf = yaml.load(f, Loader=yaml.FullLoader)
-            for key, value in conf.items():
-                if key in vars(args) and vars(args)[key] is None:
-                    vars(args)[key] = conf[key]
-                elif key not in vars(args):
-                    vars(args)[key] = conf[key]
+    def set_if_not_set(args, dict):
+        for key, value in dict.items():
+            if key in vars(args) and vars(args)[key] is None:
+                vars(args)[key] = dict[key]
+            elif key not in vars(args):
+                vars(args)[key] = dict[key]
         return args
 
     if args.config is not None:
-        args = load_if_not_set(args.config, args)
+        with Path(args.config).open() as f:
+            conf = yaml.load(f, Loader=yaml.FullLoader)
+            args = set_if_not_set(args, conf)
 
-    args = load_if_not_set('configs/defaults.yaml', args)
+    defaults = {
+        'checkpoint_freq': 1000,
+        'opt_level': 'O0',
+        'display_kp_rows': 4,
+        'display_freq': 5000,
+
+        'transporter_combine_mode': 'max',
+
+        'processes': 7,
+        'cma_algo;': 'fast',
+        'cma_step_mode': 'auto',
+        'cma_step_decay': 0.001,
+        'cma_oversample': 0,
+
+        'policy_action_select_mode': 'argmax',
+        'policy_depth': 1
+    }
+
+    args = set_if_not_set(args, defaults)
 
     if args.device is None:
         args.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')

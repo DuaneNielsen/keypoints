@@ -1,6 +1,6 @@
 import gym
 from utils import UniImageViewer, plot_keypoints_on_image
-import datasets as ds
+from ds import datasets as ds
 from models import transporter
 from models import functional as KF
 import torch

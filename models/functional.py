@@ -70,3 +70,28 @@ def point_map(kp, h, w):
     wm = wm.expand(h, -1, -1, -1).permute(1, 2, 0, 3)
     gm = - (hm + wm)
     return gm
+
+
+# def patch_axis(c, l, w):
+#     lower = c - w/l/2.0
+#     upper = c + w/l/2.0
+#     lower = lower.clamp(0.0, 1.0)
+#     upper = upper.clamp(0.0, 1.0)
+#     lower = torch.floor(lower * l)
+#     upper = torch.floor(upper * l)
+#     x = torch.zeros(c.size(0), l)
+#     x[:, lower:upper] = 1.0
+#     return x
+
+
+def patch_axis(c, l, w):
+    x = torch.linspace(0, l, l)
+    y = (2.0/w) * x + c
+    return x, y
+
+
+
+""" NOT DIFFERENTIABLE """
+def patch_map(kp, h, w, ph, pw):
+    ax1 = patch_axis(kp[:, :, 0], h, w)
+

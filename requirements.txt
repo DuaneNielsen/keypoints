@@ -9,6 +9,7 @@ matplotlib
 gym[atari]
 pyyaml
 tensorboard
+tensorboardX
 apex
 scikit-image
 moviepy

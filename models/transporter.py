@@ -110,6 +110,16 @@ class TransporterMap(knn.Container):
 
 
 def make(args, map_device=None):
+    """
+    :param args: namespace containing
+        model_type
+        model_in_channels
+        model_z_channels
+        model_keypoints
+        transporter_conbine_mode
+    :param map_device:
+    :return:
+    """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
     encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
     encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)

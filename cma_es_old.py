@@ -5,20 +5,16 @@ from models import transporter
 from models import functional as KF
 import torch
 import config
-import datasets as ds
+from ds import datasets as ds
 from torchvision.transforms import functional as TVF
-from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.categorical import Categorical
 from utils import UniImageViewer, plot_keypoints_on_image
 from torch import nn
 from torch.nn.functional import softmax
-from higgham import isPD, np_nearestPD
 import multiprocessing as mp
 from tqdm import trange
 from torch.utils.tensorboard import SummaryWriter
 from statistics import mean
-from pathlib import Path
-from numpy import linalg as la
 
 
 def make_args(args, datapack, weights, policy_features, actions, render=False):

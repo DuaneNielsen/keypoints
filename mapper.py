@@ -4,12 +4,11 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from colorama import Fore, Style
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
-from models import vgg, knn, autoencoder, transporter
-from utils import get_lr, UniImageViewer, make_grid
-import datasets as ds
+from models import vgg, knn, transporter
+from utils import get_lr, UniImageViewer
+from ds import datasets as ds
 from apex import amp
 from config import config
 
