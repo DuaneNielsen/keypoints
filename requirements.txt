@@ -13,3 +13,6 @@ tensorboardX
 apex
 scikit-image
 moviepy
+glfw
+pyopengl
+pyrr
