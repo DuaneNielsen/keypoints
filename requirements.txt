@@ -16,3 +16,4 @@ moviepy
 glfw
 pyopengl
 pyrr
+pygame

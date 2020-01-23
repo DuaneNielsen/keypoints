@@ -4,16 +4,13 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 import numpy as np
 import pyrr
 import gym
-import torch
-import ds.datasets
-import torch
-import gym
-import gym_wrappers
+import pygame
 import cma_es
 from models import transporter
 import config
-from matplotlib import pyplot as plt
+import ds
 
+pygame.init()
 
 vertex_src = """
 # version 330
@@ -62,6 +59,8 @@ def window_resize(window, width, height):
 if not glfw.init():
     raise Exception("glfw can not be initialized!")
 
+window_width, window_height = 1280, 720
+
 # creating the window
 window = glfw.create_window(1280, 720, "My OpenGL window", None, None)
 
@@ -80,28 +79,29 @@ glfw.set_window_size_callback(window, window_resize)
 glfw.make_context_current(window)
 
 
-def make_rectangle(w, h, z=0.0, u=1.0, v=1.0):
-    v = [0.0, 0.0, z, 0.0, 0.0,
-         w, 0.0, z, u, 0.0,
-         w, h, z, u, v,
-         0.0, h, z, 0.0, v]
-    i = [0,  1,  2,  2,  3,  0]
-    v = np.array(v, dtype=np.float32)
-    i = np.array(i, dtype=np.uint32)
-    return v, i
+vertices = [ 0.0,  0.0,  0.5, 0.0, 0.0,
+             1.0,  0.0,  0.5, 1.0, 0.0,
+             1.0,  1.0,  0.5, 1.0, 1.0,
+             0.0,  1.0,  0.5, 0.0, 1.0]
+
+vertices += [
+    0.0, 0.0, 0.0, 0.0
+]
+
+indices = [0,  1,  2,  2,  3,  0]
 
 
-vertices, indices = make_rectangle(160, 210)
+class Offset:
+    def __init__(self, offset, len):
+        self.offset = ctypes.c_void_p(offset*ctypes.sizeof(ctypes.c_int))
+        self.len = len
 
-m_v, m_i = make_rectangle(16, 16, 1.0)
 
-#
-# vertices = [-0.5, -0.5,  0.5, 0.0, 0.0,
-#              0.5, -0.5,  0.5, 1.0, 0.0,
-#              0.5,  0.5,  0.5, 1.0, 1.0,
-#             -0.5,  0.5,  0.5, 0.0, 1.0]
-#
-# indices = [ 0,  1,  2,  2,  3,  0]
+offsets = {'screen': Offset(0, 6)
+           }
+
+vertices = np.array(vertices, dtype=np.float32)
+indices = np.array(indices, dtype=np.uint32)
 
 shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_src, GL_FRAGMENT_SHADER))
 
@@ -144,10 +144,17 @@ glEnable(GL_DEPTH_TEST)
 glEnable(GL_BLEND)
 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
+
+atari_width, atari_height = 160, 210
+border = 10
+
 # projection = pyrr.matrix44.create_perspective_projection_matrix(45, 1280/720, 0.1, 100)
 translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([0, 0, -3]))
-scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([1.0, 1.0, 1.0]))
+scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([float(atari_width), float(atari_height), 1.0]))
 model = pyrr.matrix44.multiply(scale, translation)
+
+translation_screen2 = pyrr.matrix44.create_from_translation(pyrr.Vector3([float(atari_width + border), 0, -3]))
+screen_2 = pyrr.matrix44.multiply(scale, translation_screen2)
 
 model_loc = glGetUniformLocation(shader, "model")
 proj_loc = glGetUniformLocation(shader, "projection")
@@ -155,13 +162,32 @@ proj_loc = glGetUniformLocation(shader, "projection")
 env = gym.make('Pong-v0')
 env.reset()
 
-xpos, ypos = None, None
-
 args = config.config(['--config', '../configs/cma_es/exp2/baseline.yaml'])
 datapack = ds.datasets.datasets[args.dataset]
 
 transporter_net = transporter.make(args, map_device='cpu')
 view = cma_es.Keypoints(transporter_net)
+
+xpos, ypos = None, None
+
+def drawText(position, textString, fontsize=128, forecolor=(255,255,255,255), backcolor=(0, 0, 0, 255)):
+    shader = glGetInteger(GL_CURRENT_PROGRAM)
+    glUseProgram(0)
+    font = pygame.font.Font (None, fontsize)
+    textSurface = font.render(textString, True, forecolor, backcolor)
+    textData = pygame.image.tostring(textSurface, "RGBA", True)
+    glRasterPos3d(*position)
+    raster_pos = glGetInteger(GL_CURRENT_RASTER_POSITION)
+    glDrawPixels(textSurface.get_width(), textSurface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, textData)
+    glUseProgram(shader)
+
+def drawNumpy(position, data):
+    shader = glGetInteger(GL_CURRENT_PROGRAM)
+    glUseProgram(0)
+    glRasterPos3d(*position)
+    raster_pos = glGetInteger(GL_CURRENT_RASTER_POSITION)
+    glDrawPixels(data.shape[2], data.shape[1], GL_RGB, GL_UNSIGNED_BYTE, data)
+    glUseProgram(shader)
 
 # the main application loop
 while not glfw.window_should_close(window):
@@ -176,40 +202,49 @@ while not glfw.window_should_close(window):
     if done:
         env.reset()
 
-    def draw():
-        #rot_x = pyrr.Matrix44.from_x_rotation(0.5 * glfw.get_time())
-        #rot_y = pyrr.Matrix44.from_y_rotation(0.8 * glfw.get_time())
-
-        #rotation = pyrr.matrix44.multiply(rot_x, rot_y)
-        #model = pyrr.matrix44.multiply(scale, rotation)
-
-        glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
-        glDrawElements(GL_TRIANGLES, len(indices), GL_UNSIGNED_INT, None)
-
-    glViewport(0, 0, 160, 210)
-    projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 0, 210, -1000, 1000)
+    anchor_x, anchor_y = 0, 0
+    glViewport(anchor_x, anchor_y, (atari_width * 2) + border, atari_height)
+    projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width * 2 + border, 0, atari_height, -1000, 1000)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    draw()
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, screen_2)
+    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
+
+    anchor_x += 200 * 2
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(200, 0, 160, 134)
+    glViewport(anchor_x, 0, 160, 134)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    draw()
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
+    anchor_x += 200
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(400, 0, 32, 32)
+    glViewport(anchor_x, 0, 32, 32)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    draw()
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
-    pixel = glReadPixels(400, 0, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
-    pixel_array = np.frombuffer(pixel, dtype=np.uint8).reshape(32, 32, 3)
-    s_t = datapack.transforms(pixel_array).unsqueeze(0)
-    kp = view(s_t)
+    drawText((0, 0, 0), 'HELLO', fontsize=12)
 
+    pixel = glReadPixels(anchor_x, 0, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
+    pixel_array = np.frombuffer(pixel, dtype=np.uint8).reshape(3, 32, 32)
+    #drawNumpy((0, 0, 0), np.ones((3, 32, 32), dtype=np.uint8) * 244)
+
+    #s_t = datapack.transforms(pixel_array).unsqueeze(0)
+    #kp = view(s_t)
+
+    glViewport(0, 0, window_width, window_height)
+    #drawText((0, 0, 0), 'HELLO', fontsize=12)
+    drawNumpy((0, 0, 0), pixel_array)
+
+    anchor_x += 200
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(600, 0, 256, 256)
+    glViewport(anchor_x, 0, 256, 256)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    draw()
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
     glfw.swap_buffers(window)
 
