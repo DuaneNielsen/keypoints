@@ -9,6 +9,11 @@ import cma_es
 from models import transporter
 import config
 import ds
+from utils import UniImageViewer
+import torch
+
+
+viewer = UniImageViewer()
 
 pygame.init()
 
@@ -48,6 +53,56 @@ void main()
 """
 
 
+vertex_white_src = """
+# version 330
+
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec2 a_texture;
+
+uniform mat4 model; // combined translation and rotation
+uniform mat4 projection;
+
+//out vec4 v_color;
+out vec2 v_texture;
+
+void main()
+{
+    gl_Position = projection * model * vec4(a_position, 1.0);
+    //v_texture = 1 - a_texture; 
+    v_texture = vec2(a_texture.s, 1 - a_texture.t);
+}
+"""
+
+
+frament_white_src = """
+# version 330
+
+in vec4 v_color;
+uniform vec4 uColor;
+out vec4 out_color;
+
+void main()
+{
+    //out_color = vec4(1.0, 1.0, 0.0, 1.0);
+    out_color = uColor;
+}
+"""
+
+cmap = [(1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (1.0, 1.0, 0.0),
+        (1.0, 0.0, 1.0),
+        (0.0, 1.0, 1.0),
+
+        (0.5, 0.0, 0.0),
+        (0.0, 0.5, 0.0),
+        (0.0, 0.0, 0.5),
+        (0.5, 0.5, 0.0),
+        (0.5, 0.0, 0.5),
+        (0.0, 0.5, 0.5)]
+cmap = [pyrr.vector4.create(*c, 1.0) for c in cmap]
+
 # glfw callback functions
 def window_resize(window, width, height):
     pass
@@ -84,11 +139,28 @@ vertices = [ 0.0,  0.0,  0.5, 0.0, 0.0,
              1.0,  1.0,  0.5, 1.0, 1.0,
              0.0,  1.0,  0.5, 0.0, 1.0]
 
-vertices += [
-    0.0, 0.0, 0.0, 0.0
-]
-
 indices = [0,  1,  2,  2,  3,  0]
+
+
+v = [-1.0,  -1.0,  0.5, 0.0, 0.0,
+      1.0,  -1.0,  0.5, 1.0, 0.0,
+      1.0,  1.0,  0.5, 1.0, 1.0,
+     -1.0,  1.0,  0.5, 0.0, 1.0,
+
+    -0.9,  -0.9,  0.5, 0.0, 0.0,
+      0.9,  -0.9,  0.5, 1.0, 0.0,
+      0.9,  0.9,  0.5, 1.0, 1.0,
+      -0.9,  0.9,  0.5, 0.0, 1.0]
+
+vertices += v
+
+i = [0, 1, 5, 4,
+     5, 1, 2, 6,
+     7, 6, 2, 3,
+     0, 4, 7, 3]
+i = [item + 4 for item in i]
+indices += i
+
 
 
 class Offset:
@@ -97,13 +169,17 @@ class Offset:
         self.len = len
 
 
-offsets = {'screen': Offset(0, 6)
+offsets = {'screen': Offset(0, 6),
+           'bbox': Offset(6, len(i))
            }
 
 vertices = np.array(vertices, dtype=np.float32)
 indices = np.array(indices, dtype=np.uint32)
 
 shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_src, GL_FRAGMENT_SHADER))
+
+white_shader = compileProgram(compileShader(vertex_white_src, GL_VERTEX_SHADER), compileShader(frament_white_src, GL_FRAGMENT_SHADER))
+
 
 # Vertex Buffer Object
 VBO = glGenBuffers(1)
@@ -156,8 +232,16 @@ model = pyrr.matrix44.multiply(scale, translation)
 translation_screen2 = pyrr.matrix44.create_from_translation(pyrr.Vector3([float(atari_width + border), 0, -3]))
 screen_2 = pyrr.matrix44.multiply(scale, translation_screen2)
 
+bbox_scale_factor = 16.0/0.9
+bbox1_model = pyrr.matrix44.create_from_scale(pyrr.Vector3([bbox_scale_factor, bbox_scale_factor, 1.0]))
+
 model_loc = glGetUniformLocation(shader, "model")
 proj_loc = glGetUniformLocation(shader, "projection")
+
+color_model_loc = glGetUniformLocation(white_shader, "model")
+color_proj_loc = glGetUniformLocation(white_shader, "projection")
+color_loc = glGetUniformLocation(white_shader, "uColor")
+
 
 env = gym.make('Pong-v0')
 env.reset()
@@ -197,6 +281,7 @@ while not glfw.window_should_close(window):
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     image_data, r, done, info = env.step(env.action_space.sample())
+    glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_data.shape[1], image_data.shape[0], 0, GL_RGB, GL_UNSIGNED_BYTE,
                  image_data)
     if done:
@@ -214,41 +299,76 @@ while not glfw.window_should_close(window):
 
     anchor_x += 200 * 2
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(anchor_x, 0, 160, 134)
+    glViewport(anchor_x, anchor_y, 160, 134)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
+    # preprocess the input
     anchor_x += 200
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(anchor_x, 0, 32, 32)
+    glViewport(anchor_x, anchor_y, 32, 32)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
-    drawText((0, 0, 0), 'HELLO', fontsize=12)
+    # preprocessed input,sent to the keypoint network here
+    pixel = glReadPixels(anchor_x, anchor_y, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
+    pixel_array = np.frombuffer(pixel, dtype=np.uint8).reshape(32, 32, 3)
+    #viewer.render(pixel_array)
+    with torch.no_grad():
+        s_t = datapack.transforms(pixel_array).unsqueeze(0)
+        kp = view(s_t)
 
-    pixel = glReadPixels(anchor_x, 0, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
-    pixel_array = np.frombuffer(pixel, dtype=np.uint8).reshape(3, 32, 32)
-    #drawNumpy((0, 0, 0), np.ones((3, 32, 32), dtype=np.uint8) * 244)
-
-    #s_t = datapack.transforms(pixel_array).unsqueeze(0)
-    #kp = view(s_t)
-
-    glViewport(0, 0, window_width, window_height)
-    #drawText((0, 0, 0), 'HELLO', fontsize=12)
-    drawNumpy((0, 0, 0), pixel_array)
-
+    # scaled up view of the preprocessed view
     anchor_x += 200
+    anchor_y += 400
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(anchor_x, 0, 256, 256)
+    glViewport(anchor_x, anchor_y, 256, 256)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
+
+    glUseProgram(white_shader)
+    projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 256, 0, 256, -1000, 1000)
+
+    for i, k in enumerate(kp[0, :, :]):
+        translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([k[1].item() * 16 * 0.9,
+                                                                          k[0].item() * 16 * 0.9, 1.0]))
+        m = pyrr.matrix44.multiply(translation, bbox1_model)
+        glUniformMatrix4fv(color_proj_loc, 1, GL_FALSE, projection)
+        glUniformMatrix4fv(color_model_loc, 1, GL_FALSE, m)
+        #color = pyrr.vector4.create(1.0, 0.0, 1.0, 1.0)
+        glUniform4fv(color_loc, 1, cmap[i])
+        glDrawElements(GL_QUADS, offsets['bbox'].len, GL_UNSIGNED_INT, offsets['bbox'].offset)
+
+    glUseProgram(shader)
+
+    # draw key value pairs
+    anchor_y -= 256
+    glViewport(anchor_x, anchor_y, 265, 256)
+    placeholder = np.ones((3, 32, 32), dtype=np.uint8) * 255
+
+    y_align = 0.7
+    for k in kp[0, :, :]:
+        key = 'key'
+        label = f"{key} x: {k[0].item():.3f} y: {k[1].item():.3f}"
+        drawText((-0.5, y_align, 0), label, fontsize=24)
+        drawNumpy((-1.0, y_align, 0), placeholder)
+        y_align -= 0.4
+
+    # testing viewport
+    # glUseProgram(white_shader)
+    # glViewport(0, 400, 200, 200)
+    # projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 128, 0, 128, -1000, 1000)
+    # glUniformMatrix4fv(color_proj_loc, 1, GL_FALSE, projection)
+    # glUniformMatrix4fv(color_model_loc, 1, GL_FALSE, bbox1_model)
+    # color = pyrr.vector4.create(1.0, 1.0, 1.0, 1.0)
+    # glUniform4fv(color_loc, 1, color)
+    # glDrawElements(GL_QUADS, offsets['bbox'].len, GL_UNSIGNED_INT, offsets['bbox'].offset)
+    # glUseProgram(shader)
 
     glfw.swap_buffers(window)
-
-
 
 # terminate glfw, free up allocated resources
 glfw.terminate()
