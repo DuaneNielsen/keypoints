@@ -12,6 +12,7 @@ import ds
 from utils import UniImageViewer
 import torch
 from pyrr import matrix44, Vector3, Vector4
+from math import floor
 
 viewer = UniImageViewer()
 
@@ -226,19 +227,24 @@ border = 10
 
 # projection = pyrr.matrix44.create_perspective_projection_matrix(45, 1280/720, 0.1, 100)
 translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([0, 0, -3]))
-scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([float(atari_width), float(atari_height), 1.0]))
-model = pyrr.matrix44.multiply(scale, translation)
+atari_scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([float(atari_width), float(atari_height), 1.0]))
+atari_screen1_model = pyrr.matrix44.multiply(atari_scale, translation)
 
-translation_screen2 = pyrr.matrix44.create_from_translation(pyrr.Vector3([float(atari_width + border), 0, -3]))
-screen_2 = pyrr.matrix44.multiply(scale, translation_screen2)
+zoom = 2.2
+atari_screen2_scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([float(atari_width) * zoom, float(atari_height) * zoom, 1.0]))
+#atari_screen2_translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([float(atari_width + border), 0, -3]))
+atari_screen2_translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([0, 0, -3]))
+atari_screen_2 = pyrr.matrix44.multiply(atari_screen2_scale, atari_screen2_translation)
 
 translation_cut = matrix44.create_from_translation(Vector3([0.0, -34.0, 0.0]))
 scale_cut = matrix44.create_from_scale(Vector3([160, 210, 1.0]))
 cutout_model = pyrr.matrix44.multiply(scale_cut, translation_cut)
 
-minime_transform = matrix44.create_from_translation(Vector3([0.0, -34.0/210.0, 0.0]))
+minime_translate = matrix44.create_from_translation(Vector3([0.0, -34.0 / 210.0, 0.0]))
 minime_scale = matrix44.create_from_scale(Vector3([32.0, (210.0 / (168.0 - 34.0)) * 32.0, 1.0]))
-minime_model = matrix44.multiply(minime_transform, minime_scale)
+minime_model = matrix44.multiply(minime_translate, minime_scale)
+minime_inv_model = matrix44.inverse(minime_model)
+transporter_scale = matrix44.create_from_scale(Vector3([32.0, 32.0, 1.0]))
 
 bbox_scale_factor = 16.0/0.9
 bbox1_model = pyrr.matrix44.create_from_scale(pyrr.Vector3([bbox_scale_factor, bbox_scale_factor, 1.0]))
@@ -281,6 +287,19 @@ def drawNumpy(position, data):
     glDrawPixels(data.shape[2], data.shape[1], GL_RGB, GL_UNSIGNED_BYTE, data)
     glUseProgram(shader)
 
+
+class Pos:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+
+anchor = {'source': Pos(0, 0),
+           'plot': Pos(0, atari_height + 10),
+           'kp_input': Pos(atari_width + 10, 0),
+           'scratch': Pos(atari_width * 2 + 80, 400)
+           }
+
 # the main application loop
 while not glfw.window_should_close(window):
     glfw.poll_events()
@@ -295,65 +314,62 @@ while not glfw.window_should_close(window):
     if done:
         env.reset()
 
-    # render 2 copies of the atari screen, for source and plotting
-    anchor_x, anchor_y = 0, 0
-    glViewport(anchor_x, anchor_y, (atari_width * 2) + border, atari_height)
-    projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width * 2 + border, 0, atari_height, -1000, 1000)
+    # render reference screen used for sampling
+    glViewport(anchor['source'].x, anchor['source'].y, atari_width, atari_height)
+    projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width, 0, atari_height, -1000, 1000)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
-    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
-    glUniformMatrix4fv(model_loc, 1, GL_FALSE, screen_2)
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, atari_screen1_model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
-    # anchor_x += 200 * 2
-    # glViewport(anchor_x, anchor_y, atari_width, 168 - 34)
-    # projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width, 0, 168-34, -1000, 1000)
-    # glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    # glUniformMatrix4fv(model_loc, 1, GL_FALSE, cutout_model)
-    # glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
-
-    # only focus on the actual game area, ignore the score
-    # anchor_x += 200
-    # projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    # glViewport(anchor_x, anchor_y, 160, 134)
-    # glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    # glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
-    # glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
-
-    # save view as above but scaled to 32, 32
-    # anchor_x += 200
-    # projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    # glViewport(anchor_x, anchor_y, 32, 32)
-    # glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    # glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
-    # glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
-
-    # minime model
-    anchor_x += 200 * 2
+    # kp_input model
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 32, 0, 32, -1000, 1000)
-    glViewport(anchor_x, anchor_y, 32, 32)
+    glViewport(anchor['kp_input'].x, anchor['kp_input'].y, 32, 32)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, minime_model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
     # preprocessed input,sent to the keypoint network here
-    pixel = glReadPixels(anchor_x, anchor_y, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
+    pixel = glReadPixels(anchor['kp_input'].x, anchor['kp_input'].y, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
     pixel_array = np.frombuffer(pixel, dtype=np.uint8).reshape(32, 32, 3)
     #viewer.render(pixel_array)
     with torch.no_grad():
         s_t = datapack.transforms(pixel_array).unsqueeze(0)
         kp = view(s_t)
 
+    # convert keypoints back to basis space
+    kp_n = kp.detach().cpu().numpy()[0]
+    kp_n = np.roll(kp_n, axis=1, shift=1)
+    kp_n = np.concatenate((kp_n, np.ones((kp_n.shape[0], 2))), axis=1)
+    kp_n = matrix44.multiply(kp_n, transporter_scale)
+    kp_n = matrix44.multiply(kp_n, minime_inv_model)
 
+    glViewport(anchor['plot'].x, anchor['plot'].y, floor(atari_width * zoom),  floor((atari_height * zoom)))
+    projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width * zoom, 0, atari_height * zoom, -1000, 1000)
 
+    # render plotting screen
+    glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, atari_screen_2)
+    glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
+
+    glUseProgram(white_shader)
+
+    for i, k in enumerate(kp_n):
+        glUniformMatrix4fv(color_proj_loc, 1, GL_FALSE, projection)
+        model_translate = pyrr.matrix44.create_from_translation(Vector3([k[0], k[1], 2.0]))
+        model_scale = pyrr.matrix44.create_from_scale(Vector3([8.0/(atari_width * 0.9), 8.0/(atari_height * 0.9), 1.0]))
+        model = matrix44.multiply(model_scale, model_translate)
+        model = matrix44.multiply(model, atari_screen_2)
+        glUniformMatrix4fv(color_model_loc, 1, GL_FALSE, model)
+        glUniform4fv(color_loc, 1, cmap[i])
+        glDrawElements(GL_QUADS, offsets['bbox'].len, GL_UNSIGNED_INT, offsets['bbox'].offset)
+
+    glUseProgram(shader)
 
     # scaled up view of the preprocessed view
-    anchor_x += 200
-    anchor_y += 400
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
-    glViewport(anchor_x, anchor_y, 256, 256)
+    glViewport(anchor['scratch'].x, anchor['scratch'].y, 256, 256)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
-    glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, atari_screen1_model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
     glUseProgram(white_shader)
@@ -368,23 +384,10 @@ while not glfw.window_should_close(window):
         glUniform4fv(color_loc, 1, cmap[i])
         glDrawElements(GL_QUADS, offsets['bbox'].len, GL_UNSIGNED_INT, offsets['bbox'].offset)
 
-    glViewport(atari_width, 0, atari_width + border, atari_height)
-    projection = pyrr.matrix44.inverse(projection)
-
-    for i, k in enumerate(kp[0, :, :]):
-        translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([k[1].item()  * 0.9,
-                                                                          k[0].item()  * 0.9, 1.0]))
-        m = pyrr.matrix44.multiply(translation, bbox1_model)
-        glUniformMatrix4fv(color_proj_loc, 1, GL_FALSE, projection)
-        glUniformMatrix4fv(color_model_loc, 1, GL_FALSE, m)
-        glUniform4fv(color_loc, 1, cmap[i])
-        glDrawElements(GL_QUADS, offsets['bbox'].len, GL_UNSIGNED_INT, offsets['bbox'].offset)
-
     glUseProgram(shader)
 
     # draw key value pairs
-    anchor_y -= 256
-    glViewport(anchor_x, anchor_y, 265, 256)
+    glViewport(anchor['scratch'].x, anchor['scratch'].y - 256, 265, 256)
     placeholder = np.ones((3, 32, 32), dtype=np.uint8) * 255
 
     y_align = 0.7
@@ -394,20 +397,6 @@ while not glfw.window_should_close(window):
         drawText((-0.5, y_align, 0), label, fontsize=24)
         drawNumpy((-1.0, y_align, 0), placeholder)
         y_align -= 0.4
-
-
-
-
-    # testing viewport
-    # glUseProgram(white_shader)
-    # glViewport(0, 400, 200, 200)
-    # projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 128, 0, 128, -1000, 1000)
-    # glUniformMatrix4fv(color_proj_loc, 1, GL_FALSE, projection)
-    # glUniformMatrix4fv(color_model_loc, 1, GL_FALSE, bbox1_model)
-    # color = pyrr.vector4.create(1.0, 1.0, 1.0, 1.0)
-    # glUniform4fv(color_loc, 1, color)
-    # glDrawElements(GL_QUADS, offsets['bbox'].len, GL_UNSIGNED_INT, offsets['bbox'].offset)
-    # glUseProgram(shader)
 
     glfw.swap_buffers(window)
 
