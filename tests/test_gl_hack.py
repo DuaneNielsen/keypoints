@@ -129,7 +129,7 @@ uniform sampler2D s_texture;
 vec2 textureSize = vec2(1.0, 1.0);
 vec2 texelSize = vec2(0.01, 0.01);
 
-vec4 texture2D_bilinear(in sampler2D t, in vec2 uv, in vec2 textureSize, in vec2 texelSize)
+vec4 texture2D_maxpool(in sampler2D t, in vec2 uv, in vec2 textureSize, in vec2 texelSize)
 {
     vec2 f = fract( uv * textureSize );
     uv += ( .5 - f ) * texelSize;    // move uv to texel centre
@@ -144,17 +144,11 @@ vec4 texture2D_bilinear(in sampler2D t, in vec2 uv, in vec2 textureSize, in vec2
       }
     } 
     
-    //vec4 tr = texture(t, uv + vec2(texelSize.x, 0.0));
-    //vec4 bl = texture(t, uv + vec2(0.0, texelSize.y));
-    //vec4 br = texture(t, uv + vec2(texelSize.x, texelSize.y));
-    //vec4 tA = max( tl, tr);
-    //vec4 tB = max( bl, br);
-
     return color;
 }
 
 void main() {
-    out_color = texture2D_bilinear(s_texture, v_texture, textureSize, texelSize);
+    out_color = texture2D_maxpool(s_texture, v_texture, textureSize, texelSize);
 }
 """
 
@@ -526,7 +520,7 @@ while not glfw.window_should_close(window):
 
     glfw.swap_buffers(window)
 
-    sleep(0.3)
+    sleep(0.01)
 
 # terminate glfw, free up allocated resources
 glfw.terminate()
