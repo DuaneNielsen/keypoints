@@ -13,6 +13,7 @@ from utils import UniImageViewer
 import torch
 from pyrr import matrix44, Vector3, Vector4
 from math import floor
+from time import sleep
 
 viewer = UniImageViewer()
 
@@ -257,16 +258,16 @@ color_proj_loc = glGetUniformLocation(white_shader, "projection")
 color_loc = glGetUniformLocation(white_shader, "uColor")
 
 
+# init env
 env = gym.make('Pong-v0')
 env.reset()
 
+# init transporter keypoint network
 args = config.config(['--config', '../configs/cma_es/exp2/baseline.yaml'])
 datapack = ds.datasets.datasets[args.dataset]
-
 transporter_net = transporter.make(args, map_device='cpu')
 view = cma_es.Keypoints(transporter_net)
 
-xpos, ypos = None, None
 
 def drawText(position, textString, fontsize=128, forecolor=(255,255,255,255), backcolor=(0, 0, 0, 255)):
     shader = glGetInteger(GL_CURRENT_PROGRAM)
@@ -278,6 +279,7 @@ def drawText(position, textString, fontsize=128, forecolor=(255,255,255,255), ba
     raster_pos = glGetInteger(GL_CURRENT_RASTER_POSITION)
     glDrawPixels(textSurface.get_width(), textSurface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, textData)
     glUseProgram(shader)
+
 
 def drawNumpy(position, data):
     shader = glGetInteger(GL_CURRENT_PROGRAM)
@@ -300,13 +302,17 @@ anchor = {'source': Pos(0, 0),
            'scratch': Pos(atari_width * 2 + 80, 400)
            }
 
+xpos, ypos = None, None
+
+
 # the main application loop
 while not glfw.window_should_close(window):
     glfw.poll_events()
 
     xpos, ypos = glfw.get_cursor_pos(window)
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+    # take a step in the environment
     image_data, r, done, info = env.step(env.action_space.sample())
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_data.shape[1], image_data.shape[0], 0, GL_RGB, GL_UNSIGNED_BYTE,
@@ -336,21 +342,21 @@ while not glfw.window_should_close(window):
         s_t = datapack.transforms(pixel_array).unsqueeze(0)
         kp = view(s_t)
 
-    # convert keypoints back to basis space
+    # convert keypoints to basis space
     kp_n = kp.detach().cpu().numpy()[0]
     kp_n = np.roll(kp_n, axis=1, shift=1)
     kp_n = np.concatenate((kp_n, np.ones((kp_n.shape[0], 2))), axis=1)
     kp_n = matrix44.multiply(kp_n, transporter_scale)
     kp_n = matrix44.multiply(kp_n, minime_inv_model)
 
+    # plotting screen
     glViewport(anchor['plot'].x, anchor['plot'].y, floor(atari_width * zoom),  floor((atari_height * zoom)))
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width * zoom, 0, atari_height * zoom, -1000, 1000)
-
-    # render plotting screen
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, atari_screen_2)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
+    # draw the bounding boxes on kp locations
     glUseProgram(white_shader)
 
     for i, k in enumerate(kp_n):
@@ -365,13 +371,14 @@ while not glfw.window_should_close(window):
 
     glUseProgram(shader)
 
-    # scaled up view of the preprocessed view
+    # scaled up view of the NN input view
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 160, 34, 168, -1000, 1000)
     glViewport(anchor['scratch'].x, anchor['scratch'].y, 256, 256)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, atari_screen1_model)
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
+    # draw bounding boxes on NN view
     glUseProgram(white_shader)
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 256, 0, 256, -1000, 1000)
 
@@ -386,7 +393,7 @@ while not glfw.window_should_close(window):
 
     glUseProgram(shader)
 
-    # draw key value pairs
+    # draw labels for key value pairs
     glViewport(anchor['scratch'].x, anchor['scratch'].y - 256, 265, 256)
     placeholder = np.ones((3, 32, 32), dtype=np.uint8) * 255
 
@@ -395,10 +402,22 @@ while not glfw.window_should_close(window):
         key = 'key'
         label = f"{key} x: {k[0].item():.3f} y: {k[1].item():.3f}"
         drawText((-0.5, y_align, 0), label, fontsize=24)
-        drawNumpy((-1.0, y_align, 0), placeholder)
+        #drawNumpy((-1.0, y_align, 0), placeholder)
         y_align -= 0.4
 
+    for i, k in enumerate(kp_n):
+        glViewport(anchor['scratch'].x, anchor['scratch'].y - (i * 50) - 50, 32, 32)
+        model_trans = matrix44.create_from_translation(Vector3((-k[0], -k[1], 0.0)))
+        model_scale = matrix44.create_from_scale(Vector3((atari_width, atari_height, 1.0)))
+        model = matrix44.multiply(model_trans, model_scale)
+        projection = pyrr.matrix44.create_orthogonal_projection_matrix(-8.0, 8.0, -8.0, 8.0, -1000, 1000)
+        glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+        glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
+
     glfw.swap_buffers(window)
+
+    sleep(0.3)
 
 # terminate glfw, free up allocated resources
 glfw.terminate()
