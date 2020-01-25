@@ -226,14 +226,12 @@ glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 atari_width, atari_height = 160, 210
 border = 10
 
-# projection = pyrr.matrix44.create_perspective_projection_matrix(45, 1280/720, 0.1, 100)
 translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([0, 0, -3]))
 atari_scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([float(atari_width), float(atari_height), 1.0]))
 atari_screen1_model = pyrr.matrix44.multiply(atari_scale, translation)
 
 zoom = 2.2
 atari_screen2_scale = pyrr.matrix44.create_from_scale(pyrr.Vector3([float(atari_width) * zoom, float(atari_height) * zoom, 1.0]))
-#atari_screen2_translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([float(atari_width + border), 0, -3]))
 atari_screen2_translation = pyrr.matrix44.create_from_translation(pyrr.Vector3([0, 0, -3]))
 atari_screen_2 = pyrr.matrix44.multiply(atari_screen2_scale, atari_screen2_translation)
 
@@ -402,7 +400,6 @@ while not glfw.window_should_close(window):
         key = 'key'
         label = f"{key} x: {k[0].item():.3f} y: {k[1].item():.3f}"
         drawText((-0.5, y_align, 0), label, fontsize=24)
-        #drawNumpy((-1.0, y_align, 0), placeholder)
         y_align -= 0.4
 
     for i, k in enumerate(kp_n):
