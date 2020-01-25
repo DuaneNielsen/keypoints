@@ -14,6 +14,7 @@ import torch
 from pyrr import matrix44, Vector3, Vector4
 from math import floor
 from time import sleep
+from PIL import Image
 
 viewer = UniImageViewer()
 
@@ -280,9 +281,9 @@ indices = np.array(indices, dtype=np.uint32)
 
 #shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_src, GL_FRAGMENT_SHADER))
 
-#shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_bilinear_src, GL_FRAGMENT_SHADER))
+shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_bilinear_src, GL_FRAGMENT_SHADER))
 
-shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_maxpool_src, GL_FRAGMENT_SHADER))
+maxpool_shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_maxpool_src, GL_FRAGMENT_SHADER))
 
 white_shader = compileProgram(compileShader(vertex_white_src, GL_VERTEX_SHADER), compileShader(frament_white_src, GL_FRAGMENT_SHADER))
 
@@ -398,14 +399,22 @@ class Pos:
         self.y = y
 
 
+class Size:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.pyrr_orthogonal_proj = -width/2.0, width/2.0, -height/2.0, height/2.0, -1000.0, 1000
+
+
 anchor = {'source': Pos(0, 0),
            'plot': Pos(0, atari_height + 10),
            'kp_input': Pos(atari_width + 10, 0),
-           'scratch': Pos(atari_width * 2 + 80, 400)
+           'scratch': Pos(atari_width * 2 + 80, 400),
            }
 
 xpos, ypos = None, None
 
+imageid = 0
 
 # the main application loop
 while not glfw.window_should_close(window):
@@ -432,6 +441,7 @@ while not glfw.window_should_close(window):
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
     # kp_input model
+    glUseProgram(maxpool_shader)
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, 32, 0, 32, -1000, 1000)
     glViewport(anchor['kp_input'].x, anchor['kp_input'].y, 32, 32)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
@@ -439,8 +449,8 @@ while not glfw.window_should_close(window):
     glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
 
     # preprocessed input,sent to the keypoint network here
-    pixel = glReadPixels(anchor['kp_input'].x, anchor['kp_input'].y, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
-    pixel_array = np.frombuffer(pixel, dtype=np.uint8).reshape(32, 32, 3)
+    buffer = glReadPixels(anchor['kp_input'].x, anchor['kp_input'].y, 32, 32, format=GL_RGB, type=GL_UNSIGNED_BYTE)
+    pixel_array = np.frombuffer(buffer, dtype=np.uint8).reshape(32, 32, 3)
     #viewer.render(pixel_array)
     with torch.no_grad():
         s_t = datapack.transforms(pixel_array).unsqueeze(0)
@@ -454,6 +464,7 @@ while not glfw.window_should_close(window):
     kp_n = matrix44.multiply(kp_n, minime_inv_model)
 
     # plotting screen
+    glUseProgram(shader)
     glViewport(anchor['plot'].x, anchor['plot'].y, floor(atari_width * zoom),  floor((atari_height * zoom)))
     projection = pyrr.matrix44.create_orthogonal_projection_matrix(0, atari_width * zoom, 0, atari_height * zoom, -1000, 1000)
     glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
@@ -509,7 +520,8 @@ while not glfw.window_should_close(window):
         y_align -= 0.4
 
     for i, k in enumerate(kp_n):
-        glViewport(anchor['scratch'].x, anchor['scratch'].y - (i * 50) - 50, 32, 32)
+        anchr = Pos(anchor['scratch'].x, anchor['scratch'].y - (i * 50) - 50)
+        glViewport(anchr.x, anchr.y, 32, 32)
         model_trans = matrix44.create_from_translation(Vector3((-k[0], -k[1], 0.0)))
         model_scale = matrix44.create_from_scale(Vector3((atari_width, atari_height, 1.0)))
         model = matrix44.multiply(model_trans, model_scale)
@@ -517,6 +529,25 @@ while not glfw.window_should_close(window):
         glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
         glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
         glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
+
+    for i, k in enumerate(kp_n):
+        anchr = Pos(anchor['kp_input'].x, anchor['kp_input'].y + (i * 50) + 50)
+        size = Size(16, 16)
+        glViewport(anchr.x, anchr.y, size.width, size.height)
+        model_trans = matrix44.create_from_translation(Vector3((-k[0], -k[1], 0.0)))
+        model_scale = matrix44.create_from_scale(Vector3((atari_width, atari_height, 1.0)))
+        model = matrix44.multiply(model_trans, model_scale)
+        projection = pyrr.matrix44.create_orthogonal_projection_matrix(*size.pyrr_orthogonal_proj)
+        glUniformMatrix4fv(proj_loc, 1, GL_FALSE, projection)
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, model)
+        glDrawElements(GL_TRIANGLES, offsets['screen'].len, GL_UNSIGNED_INT, offsets['screen'].offset)
+
+        buffer = glReadPixels(anchr.x, anchr.y, size.width, size.height, format=GL_RGB, type=GL_UNSIGNED_BYTE)
+        image = Image.frombuffer(mode='RGB', size=(size.width, size.height), data=buffer)
+        image.save(f'/home/duane/PycharmProjects/keypoints/data/patches/pong/unclassified/pong_{imageid}.png')
+        pixel_array = np.frombuffer(buffer, dtype=np.uint8).reshape(size.width, size.height, 3)
+        viewer.render(pixel_array)
+        imageid += 1
 
     glfw.swap_buffers(window)
 
