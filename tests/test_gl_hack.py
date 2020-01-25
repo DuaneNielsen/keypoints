@@ -55,6 +55,112 @@ void main()
 """
 
 
+fragment_bilinear_src = """
+# version 330
+
+in vec2 v_texture;
+
+out vec4 out_color;
+
+uniform sampler2D s_texture;
+
+vec2 textureSize = vec2(1.0, 1.0);
+vec2 texelSize = vec2(1/160, 1/210);
+
+vec4 texture2D_bilinear(in sampler2D t, in vec2 uv, in vec2 textureSize, in vec2 texelSize)
+{
+    vec2 f = fract( uv * textureSize );
+    uv += ( .5 - f ) * texelSize;    // move uv to texel centre
+    vec4 tl = texture2D(t, uv);
+    vec4 tr = texture2D(t, uv + vec2(texelSize.x, 0.0));
+    vec4 bl = texture2D(t, uv + vec2(0.0, texelSize.y));
+    vec4 br = texture2D(t, uv + vec2(texelSize.x, texelSize.y));
+    vec4 tA = mix( tl, tr, f.x );
+    vec4 tB = mix( bl, br, f.x );
+    return mix( tA, tB, f.y );
+}
+
+void main() {
+    out_color = texture2D_bilinear(s_texture, v_texture, textureSize, texelSize);
+}
+"""
+
+fragment_maxpool_nowork_src = """
+# version 330
+
+in vec2 v_texture;
+
+out vec4 out_color;
+
+uniform sampler2D s_texture;
+
+vec2 textureSize = vec2(1.0, 1.0);
+vec2 texelSize = vec2(0.01, 0.01);
+
+vec4 texture2D_bilinear(in sampler2D t, in vec2 uv, in vec2 textureSize, in vec2 texelSize)
+{
+    vec2 f = fract( uv * textureSize );
+    uv += ( .5 - f ) * texelSize;    // move uv to texel centre
+    vec4 tl = texture2D(t, uv);
+    vec4 tr = texture2D(t, uv + vec2(texelSize.x, 0.0));
+    vec4 bl = texture2D(t, uv + vec2(0.0, texelSize.y));
+    vec4 br = texture2D(t, uv + vec2(texelSize.x, texelSize.y));
+    vec4 tA = max( tl, tr);
+    vec4 tB = max( bl, br);
+    
+    return max( tA, tB );
+}
+
+void main() {
+    out_color = texture2D_bilinear(s_texture, v_texture, textureSize, texelSize);
+}
+"""
+
+
+fragment_maxpool_src = """
+# version 330
+
+in vec2 v_texture;
+
+out vec4 out_color;
+
+uniform sampler2D s_texture;
+
+vec2 textureSize = vec2(1.0, 1.0);
+vec2 texelSize = vec2(0.01, 0.01);
+
+vec4 texture2D_bilinear(in sampler2D t, in vec2 uv, in vec2 textureSize, in vec2 texelSize)
+{
+    vec2 f = fract( uv * textureSize );
+    uv += ( .5 - f ) * texelSize;    // move uv to texel centre
+    
+    vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 tl;
+    
+    for (int i =-1; i < 3; i++) {
+      for (int j =-1; j < 3; j++) {
+        tl = texture(t, uv + vec2(texelSize.x * i, texelSize.y * j));
+        color = max( tl, color );
+      }
+    } 
+    
+    //vec4 tr = texture(t, uv + vec2(texelSize.x, 0.0));
+    //vec4 bl = texture(t, uv + vec2(0.0, texelSize.y));
+    //vec4 br = texture(t, uv + vec2(texelSize.x, texelSize.y));
+    //vec4 tA = max( tl, tr);
+    //vec4 tB = max( bl, br);
+
+    return color;
+}
+
+void main() {
+    out_color = texture2D_bilinear(s_texture, v_texture, textureSize, texelSize);
+}
+"""
+
+
+compileShader(fragment_bilinear_src, GL_FRAGMENT_SHADER)
+
 vertex_white_src = """
 # version 330
 
@@ -178,7 +284,11 @@ offsets = {'screen': Offset(0, 6),
 vertices = np.array(vertices, dtype=np.float32)
 indices = np.array(indices, dtype=np.uint32)
 
-shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_src, GL_FRAGMENT_SHADER))
+#shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_src, GL_FRAGMENT_SHADER))
+
+#shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_bilinear_src, GL_FRAGMENT_SHADER))
+
+shader = compileProgram(compileShader(vertex_src, GL_VERTEX_SHADER), compileShader(fragment_maxpool_src, GL_FRAGMENT_SHADER))
 
 white_shader = compileProgram(compileShader(vertex_white_src, GL_VERTEX_SHADER), compileShader(frament_white_src, GL_FRAGMENT_SHADER))
 
@@ -315,6 +425,8 @@ while not glfw.window_should_close(window):
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_data.shape[1], image_data.shape[0], 0, GL_RGB, GL_UNSIGNED_BYTE,
                  image_data)
+    glTexParameter(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+    glTexParameter(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     if done:
         env.reset()
 
