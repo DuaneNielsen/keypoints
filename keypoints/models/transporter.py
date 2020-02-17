@@ -109,31 +109,30 @@ class TransporterMap(knn.Container):
         self.map.save(directory + '/map')
 
 
-def make(args, map_device=None):
+def make(type, in_channels, z_channels, keypoints, combine_mode='max', load=None, transfer_load=None, map_device=None):
     """
-    :param args: namespace containing
-        model_type
-        model_in_channels
-        model_z_channels
-        model_keypoints
-        transporter_conbine_mode
+    :param type
+    :param in_channels
+    :param channels
+    :param keypoints
+    :param conbine_mode: max, sum_and_clamp, loop, pretrained-network
     :param map_device:
     :return:
     """
     nonlinearity, kwargs = nn.LeakyReLU, {"inplace": True}
-    encoder_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    encoder = knn.Unit(args.model_in_channels, args.model_z_channels, encoder_core)
-    decoder_core = vgg.make_layers(vgg.decoder_cfg[args.model_type])
-    decoder = knn.Unit(args.model_z_channels, args.model_in_channels, decoder_core)
-    keypoint_core = vgg.make_layers(vgg.vgg_cfg[args.model_type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
-    keypoint = knn.Unit(args.model_in_channels, args.model_keypoints, keypoint_core)
+    encoder_core = vgg.make_layers(vgg.vgg_cfg[type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
+    encoder = knn.Unit(in_channels, z_channels, encoder_core)
+    decoder_core = vgg.make_layers(vgg.decoder_cfg[type])
+    decoder = knn.Unit(z_channels, in_channels, decoder_core)
+    keypoint_core = vgg.make_layers(vgg.vgg_cfg[type], nonlinearity=nonlinearity, nonlinearity_kwargs=kwargs)
+    keypoint = knn.Unit(in_channels, keypoints, keypoint_core)
     keymapper = knn.GaussianLike(sigma=0.1)
     transporter_net = TransporterNet(encoder, keypoint, keymapper, decoder, init_weights=True,
-                                     combine_method=args.transporter_combine_mode)
+                                     combine_method=combine_mode)
 
-    if args.load is not None:
-        transporter_net.load(args.load, map_device)
-    if args.transfer_load is not None:
-        transporter_net.load_from_autoencoder(args.transfer_load)
+    if load is not None:
+        transporter_net.load(load, map_device)
+    if transfer_load is not None:
+        transporter_net.load_from_autoencoder(transfer_load)
 
     return transporter_net

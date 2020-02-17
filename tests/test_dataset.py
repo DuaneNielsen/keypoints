@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+
+import cma_es
 from keypoints.ds import datasets as d
 from keypoints.ds.datasets import Pos, SquareDataset, AtariDataset, if_done_or_nonzero_reward
 from torch.utils.data import DataLoader
@@ -36,7 +38,7 @@ def test_pong():
     done = False
 
     while not done:
-        s, r, done, info = env.step(env.action_space.sample())
+        s, r, done, info = env.step(cma_es.sample())
         v.render(s)
         s = d.pong_color_prepro(s)
         #s = cv2.cvtColor(s, cv2.COLOR_RGB2GRAY)

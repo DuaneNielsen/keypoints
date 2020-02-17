@@ -5,7 +5,9 @@ import numpy as np
 import pyrr
 import gym
 import pygame
+
 import cma_es
+import main
 from keypoints.models import transporter
 import config
 from utils import UniImageViewer
@@ -368,7 +370,7 @@ env.reset()
 args = config.config(['--config', '../configs/cma_es/exp2/baseline.yaml'])
 datapack = keypoints.ds.datasets.datasets[args.dataset]
 transporter_net = transporter.make(args, map_device='cpu')
-view = cma_es.Keypoints(transporter_net)
+view = main.Keypoints(transporter_net)
 
 
 def drawText(position, textString, fontsize=128, forecolor=(255,255,255,255), backcolor=(0, 0, 0, 255)):
@@ -423,7 +425,7 @@ while not glfw.window_should_close(window):
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
     # take a step in the environment
-    image_data, r, done, info = env.step(env.action_space.sample())
+    image_data, r, done, info = env.step(cma_es.sample())
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_data.shape[1], image_data.shape[0], 0, GL_RGB, GL_UNSIGNED_BYTE,
                  image_data)

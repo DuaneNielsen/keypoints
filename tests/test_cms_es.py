@@ -1,7 +1,9 @@
 from matplotlib import pyplot as plt
 import torch
 import torch.nn as nn
+
 import cma_es
+import main
 from matplotlib.patches import Ellipse, Circle
 from math import acos, degrees, log, floor, sqrt
 import time

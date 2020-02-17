@@ -1,5 +1,7 @@
 import gym
 import gym.wrappers as w
+
+import cma_es
 import gym_wrappers
 
 
@@ -11,7 +13,7 @@ def test_atari():
     done = False
 
     while not done:
-        obs, r, done, info = env.step(env.action_space.sample())
+        obs, r, done, info = env.step(cma_es.sample())
         env.render()
 
 
@@ -23,5 +25,5 @@ def test_wrapper():
     done = False
 
     while not done:
-        obs, r, done, info = env.step(env.action_space.sample())
+        obs, r, done, info = env.step(cma_es.sample())
         env.render()

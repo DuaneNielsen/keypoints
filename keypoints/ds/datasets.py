@@ -14,6 +14,8 @@ import gym
 import skimage.measure
 from tqdm import tqdm
 from random import randint
+
+import cma_es
 from keypoints import models as MF
 
 Pos = collections.namedtuple('Pos', 'x, y')
@@ -260,6 +262,7 @@ class AtariDataPack(DataPack):
         self.prepro = prepro
         self.transforms = transforms
         self.action_map = action_map
+        self.shape = (3, 210, 160)
 
     def make(self, train_len, test_len, *args, **kwargs):
         total_len = train_len + test_len

@@ -1,8 +1,9 @@
+import cma_es
 import keypoints.ds.datasets
 import torch
 import gym
 import gym_wrappers
-import cma_es
+import main
 from keypoints.models import transporter
 import config
 from matplotlib import pyplot as plt
@@ -19,10 +20,10 @@ def test_patch():
     done = False
     env.reset()
     transporter_net = transporter.make(args, map_device='cpu')
-    view = cma_es.Keypoints(transporter_net)
+    view = main.Keypoints(transporter_net)
 
     while not done:
-        s, r, done, info = env.step(env.unwrapped.action_space.sample())
+        s, r, done, info = env.step(cma_es.sample())
         s = datapack.prepro(s)
         s_t = datapack.transforms(s).unsqueeze(0)
         kp = view(s_t)

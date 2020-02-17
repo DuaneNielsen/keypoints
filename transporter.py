@@ -10,7 +10,6 @@ from apex import amp
 from keypoints.ds import datasets as ds
 from config import config
 
-
 if __name__ == '__main__':
 
     args = config()
@@ -41,7 +40,8 @@ if __name__ == '__main__':
         augment = nop
 
     """ model """
-    transporter_net = transporter.make(args).to(args.device)
+    transporter_net = transporter.make(args.model_type, args.model_in_channels, args.model_z_channels,
+                                       args.model_keypoints, load=args.load).to(args.device)
 
     """ optimizer """
     optim = Adam(transporter_net.parameters(), lr=1e-4)
@@ -51,16 +51,21 @@ if __name__ == '__main__':
         amp.initialize(transporter_net, optim, opt_level=args.opt_level)
 
     """ loss function """
+
+
     def l2_reconstruction_loss(x, x_, loss_mask=None):
         loss = (x - x_) ** 2
         if loss_mask is not None:
             loss = loss * loss_mask
         return torch.mean(loss)
 
+
     criterion = l2_reconstruction_loss
+
 
     def to_device(data, device):
         return tuple([x.to(device) for x in data])
+
 
     for epoch in range(1, args.epochs + 1):
 

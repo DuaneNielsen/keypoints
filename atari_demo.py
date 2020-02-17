@@ -1,4 +1,6 @@
 import gym
+
+import cma_es
 from utils import UniImageViewer, plot_keypoints_on_image
 from keypoints.ds import datasets as ds
 from keypoints.models import transporter, functional as KF
@@ -27,7 +29,7 @@ if __name__ == '__main__':
             done = False
 
             while not done:
-                s, r, done, i = env.step(env.action_space.sample())
+                s, r, done, i = env.step(cma_es.sample())
                 s = datapack.prepro(s)
                 s_t = datapack.transforms(s).unsqueeze(0).to(args.device)
                 heatmap = transporter_net.keypoint(s_t)
