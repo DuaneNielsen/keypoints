@@ -26,7 +26,7 @@ class OutputBlock(nn.Module):
 
 class Classifier(Container):
     def __init__(self, name, feature_block, encoder, output_block, init_weights=True):
-        super().__init__(name)
+        super().__init__()
         self.feature_block = feature_block
         self.encoder = encoder
         self.output_block = output_block
