@@ -6,9 +6,9 @@ from colorama import Fore, Style
 from torch.optim import Adam
 import torch.nn as nn
 import statistics as stats
-from models import vgg, knn, transporter
+from keypoints.models import vgg, knn, transporter
 from utils import get_lr, UniImageViewer
-from ds import datasets as ds
+from keypoints.ds import datasets as ds
 from apex import amp
 from config import config
 

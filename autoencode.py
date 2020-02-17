@@ -7,9 +7,9 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
-from models import vgg, knn, autoencoder
+from keypoints.models import vgg, knn, autoencoder
 from utils import get_lr, UniImageViewer, make_grid
-from ds import datasets as ds
+from keypoints.ds import datasets as ds
 from apex import amp
 from config import config
 

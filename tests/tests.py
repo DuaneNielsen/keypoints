@@ -1,5 +1,5 @@
-import models.functional as MF
-from models import knn, losses
+from keypoints import models as MF
+from keypoints.models import knn, losses
 import torch
 import torch.nn.functional as F
 from tps import tps_grid

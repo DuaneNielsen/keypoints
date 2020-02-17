@@ -1,6 +1,6 @@
 import torch
-from models import knn
-import models.vgg as vgg
+from keypoints.models import knn
+from keypoints import models as vgg
 
 
 class KeyNet(knn.Container):

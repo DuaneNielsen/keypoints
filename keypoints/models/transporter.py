@@ -1,8 +1,8 @@
 import torch
-from models import knn
+from keypoints.models import knn
 import torch.nn as nn
-import models.functional as MF
-import models.vgg as vgg
+from keypoints.models import functional as MF
+from keypoints.models import vgg
 
 
 class TransporterNet(knn.Container):

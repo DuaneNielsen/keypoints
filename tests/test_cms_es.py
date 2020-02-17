@@ -1,13 +1,12 @@
 from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import torch
 import torch.nn as nn
 import cma_es
 from matplotlib.patches import Ellipse, Circle
-from math import cos, sin, acos, degrees, log, floor, sqrt
+from math import acos, degrees, log, floor, sqrt
 import time
 from torch.distributions import MultivariateNormal
-import models.knn as knn
+from keypoints import models as knn
 
 objective_mean = (1.0, 1.0)
 

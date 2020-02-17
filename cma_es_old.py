@@ -1,11 +1,9 @@
 import gym
 
-import models.knn
-from models import transporter
-from models import functional as KF
+from keypoints.models import transporter, functional as KF
 import torch
 import config
-from ds import datasets as ds
+from keypoints.ds import datasets as ds
 from torchvision.transforms import functional as TVF
 from torch.distributions.categorical import Categorical
 from utils import UniImageViewer, plot_keypoints_on_image
@@ -41,7 +39,7 @@ def evaluate(args, env, policy, render=False):
             s = prepro(s)
             s_t = transform(s).unsqueeze(0).type(policy.dtype).to(device)
             kp = view(s_t)
-            p = softmax(models.knn.flatten().matmul(policy), dim=0)
+            p = softmax(keypoints.models.knn.flatten().matmul(policy), dim=0)
             a = Categorical(p).sample()
             a = action_map(a)
             return a, kp

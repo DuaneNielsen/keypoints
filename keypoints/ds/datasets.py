@@ -14,7 +14,7 @@ import gym
 import skimage.measure
 from tqdm import tqdm
 from random import randint
-import models.functional as MF
+from keypoints import models as MF
 
 Pos = collections.namedtuple('Pos', 'x, y')
 

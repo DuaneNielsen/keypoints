@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import models.knn as knn
+from keypoints import models as knn
 #from torch.utils.tensorboard import SummaryWriter
 from tensorboardX import SummaryWriter
 from math import floor, sqrt, log
@@ -9,9 +9,8 @@ from torch.distributions import Categorical
 import torchvision.transforms.functional as TVF
 
 from utils import UniImageViewer, plot_keypoints_on_image
-from models import transporter
-from models import functional as KF
-from ds import datasets as ds
+from keypoints.models import transporter, functional as KF
+from keypoints.ds import datasets as ds
 import gym
 import gym_wrappers
 import torch.multiprocessing as mp

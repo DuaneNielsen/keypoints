@@ -1,19 +1,19 @@
-import ds.datasets
+import keypoints.ds.datasets
 import torch
 import gym
 import gym_wrappers
 import cma_es
-from models import transporter
+from keypoints.models import transporter
 import config
 from matplotlib import pyplot as plt
-from models.functional import patch_axis
+from keypoints.models import patch_axis
 
 def test_patch():
 
     args = config.config(['--config', '../configs/cma_es/exp2/baseline.yaml'])
 
     torch.manual_seed(0)
-    datapack = ds.datasets.datasets[args.dataset]
+    datapack = keypoints.ds.datasets.datasets[args.dataset]
     env = gym.make(datapack.env)
     env = gym_wrappers.RewardCountLimit(env, 5)
     done = False

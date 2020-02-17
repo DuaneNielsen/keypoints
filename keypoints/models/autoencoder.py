@@ -1,4 +1,4 @@
-from models.knn import Container
+from keypoints.models import Container
 
 
 class AutoEncoder(Container):

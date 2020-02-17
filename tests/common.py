@@ -2,7 +2,7 @@ from pathlib import Path
 import cv2
 from torchvision.transforms import ToTensor
 
-from models import knn
+from keypoints.models import knn
 import torch
 
 """ DATA  """

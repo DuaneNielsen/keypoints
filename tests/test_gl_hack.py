@@ -6,12 +6,11 @@ import pyrr
 import gym
 import pygame
 import cma_es
-from models import transporter
+from keypoints.models import transporter
 import config
-import ds
 from utils import UniImageViewer
 import torch
-from pyrr import matrix44, Vector3, Vector4
+from pyrr import matrix44, Vector3
 from math import floor
 from time import sleep
 from PIL import Image
@@ -367,7 +366,7 @@ env.reset()
 
 # init transporter keypoint network
 args = config.config(['--config', '../configs/cma_es/exp2/baseline.yaml'])
-datapack = ds.datasets.datasets[args.dataset]
+datapack = keypoints.ds.datasets.datasets[args.dataset]
 transporter_net = transporter.make(args, map_device='cpu')
 view = cma_es.Keypoints(transporter_net)
 

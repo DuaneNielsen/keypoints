@@ -9,9 +9,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
 import statistics as stats
 
-import models.classifier
-import models.knn
-from models import vgg
+from keypoints import models
+import keypoints.models.knn
+from keypoints.models import vgg
 from utils import precision, get_lr
 
 if __name__ == '__main__':
@@ -42,10 +42,10 @@ if __name__ == '__main__':
     test_l = DataLoader(test, batch_size=batch_size, shuffle=True, drop_last=True)
     classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
-    feature_block = models.knn.FeatureBlock(3)
-    output_block = models.classifier.OutputBlock(num_classes)
-    core_block = models.vgg.make_layers(models.vgg.vgg_cfg['A'])
-    classifier = models.classifier.Classifier('vgg11_classifier', feature_block, core_block, output_block).to('cuda')
+    feature_block = keypoints.models.knn.FeatureBlock(3)
+    output_block = keypoints.models.classifier.OutputBlock(num_classes)
+    core_block = keypoints.models.vgg.make_layers(keypoints.models.vgg.vgg_cfg['A'])
+    classifier = keypoints.models.classifier.Classifier('vgg11_classifier', feature_block, core_block, output_block).to('cuda')
 
     reload = False
     load_run_id = 2

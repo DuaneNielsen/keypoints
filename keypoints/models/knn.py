@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch
 from torch import nn as nn
-from models.functional import gaussian_like_function, spacial_softmax, spacial_logsoftmax
+from keypoints.models.functional import gaussian_like_function, spacial_softmax, spacial_logsoftmax
 
 
 class Container(nn.Module):

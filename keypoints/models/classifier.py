@@ -1,5 +1,5 @@
 import torch
-from models.knn import Container
+from keypoints.models import Container
 import torch.nn as nn
 
 

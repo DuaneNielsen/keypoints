@@ -1,6 +1,5 @@
 import torch.nn as nn
-import models.knn as knn
-from math import floor
+from keypoints import models as knn
 
 model_urls = {
     'vgg11': 'https://download.pytorch.org/models/vgg11-bbd30ac9.pth',

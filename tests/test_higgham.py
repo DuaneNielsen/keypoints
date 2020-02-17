@@ -1,5 +1,5 @@
 import torch
-from higgham import nearestPD, isPD, nearestPDHack
+from higgham import isPD, nearestPDHack
 from tqdm import tqdm
 
 
